@@ -1,0 +1,49 @@
+PANDA — COMO INSTALAR NO CELULAR
+(app da Secretaria Municipal de Infraestrutura e Defesa Civil de Ilhéus · versão V1.SMDIEDC)
+
+Este pacote é o app completo, com as ferramentas de PDF dentro dele.
+Depois de instalado, funciona SEM INTERNET e não depende de nenhum site.
+Tudo cabe numa pasta só, então dá para fazer pelo próprio celular.
+
+1. PREPARAR OS ARQUIVOS (no celular)
+   a) Baixe o ZIP do Panda.
+   b) Abra o app "Arquivos" (Files by Google) > Downloads > toque no ZIP > "Extrair".
+      Aparece uma pasta com uns 48 arquivos (index.html, app.js, sw.js…).
+
+2. HOSPEDAR (uma vez só; é grátis)
+   a) No Chrome, entre em github.com e crie uma conta (ou entre na sua).
+   b) Toque no "+" (canto de cima) > "New repository".
+      Nome: panda · marque "Public" · "Create repository".
+   c) Na página que abrir, toque em "uploading an existing file".
+      Toque em "choose your files", entre na pasta extraída, segure o primeiro
+      arquivo e escolha "Selecionar tudo" > Abrir.
+      Espere subir tudo e toque em "Commit changes".
+   d) Toque em "Settings" > "Pages" (no menu da esquerda).
+      Em "Branch", escolha "main" e "/ (root)" > "Save".
+   e) Espere 1 ou 2 minutos. O app fica em:
+      https://SEU-USUARIO.github.io/panda/
+
+3. INSTALAR
+   a) Abra esse endereço no Chrome do celular.
+   b) Menu (três pontinhos) > "Instalar app" (ou "Adicionar à tela inicial" > Instalar).
+      O ícone é o panda. Segurando o ícone aparecem "Novo documento" e "Mesa de PDF".
+
+4. QUANDO VIER UMA VERSÃO NOVA
+   Repita só o passo 2c no MESMO repositório (os arquivos novos substituem os antigos).
+   Não mude o nome do repositório: os seus processos ficam guardados no celular
+   junto com esse endereço. Abra o app com internet uma vez para ele se atualizar.
+
+5. RECEBER ARQUIVOS DO WHATSAPP
+   No WhatsApp, segure o PDF, foto ou ZIP > Compartilhar > Panda.
+   Texto compartilhado entra como texto pronto.
+
+6. PASSAR OS DADOS DE UM LUGAR PARA OUTRO
+   Cada lugar guarda os seus próprios dados (o app instalado, o link no Chrome e o
+   app do Claude são lugares diferentes). Para levar os processos:
+   Ajustes > Fazer backup (no lugar antigo) e Ajustes > Restaurar backup (no novo).
+   Faça backup de vez em quando e guarde o ZIP no Drive.
+
+OBSERVAÇÕES
+- O repositório público contém só o código do app, nunca os seus processos.
+- Bibliotecas incluídas: pdf-lib (MIT), JSZip (MIT), PDF.js (Apache 2.0),
+  fontes Liberation (SIL OFL). As licenças são os arquivos LICENSE deste pacote.
