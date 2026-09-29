@@ -1,5 +1,5 @@
 /* Proc.Ios — service worker: funciona offline e recebe arquivos compartilhados */
-const VERSION = 'panda-v1-20260927-1841';
+const VERSION = 'panda-v1-20260928-2029';
 const SHELL = [
    "./",
    "./FoxitDingbats.pfb",

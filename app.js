@@ -188,10 +188,18 @@ const SETTINGS_PADRAO = () => ({
   cidade:'Ilhéus',
   setor:'Superintendência de Projetos e Fiscalização',
   signatarios:[
-    { id:'s1', nome:'Lucas S. L. P. Santana', cargo:'Assistente Administrativo', mat:'023479', autoridade:false, carimbo:'' },
-    { id:'s2', nome:'Hiago C. S. Guimarães Ramos', cargo:'Superintendente de Projetos e Fiscalização', mat:'', autoridade:false, carimbo:'' },
-    { id:'s3', nome:'Gabriel de Andrade Cerqueira', cargo:'Secretário de Infraestrutura e Defesa Civil', mat:'', autoridade:true, carimbo:'' }
+    { id:'s3', nome:'Gabriel de Andrade Cerqueira', cargo:'Secretário de Infraestrutura e Defesa Civil', mat:'', autoridade:true, sec:'seinfra' },
+    { id:'s10', nome:'Evani Cavalcante de Souza Rocha', cargo:'Secretária Municipal de Educação', mat:'', autoridade:false, sec:'educacao' },
+    { id:'s2', nome:'Hiago C. S. Guimarães Ramos', cargo:'Superintendente de Projetos e Fiscalização', mat:'', autoridade:false },
+    { id:'s6', nome:'Isabela Farias de Lima', cargo:'Gerente de Infraestrutura', mat:'', autoridade:false },
+    { id:'s8', nome:'Lorena Santos Damasceno de Melo', cargo:'Engenheira Civil', mat:'', reg:'CREA nº 3000135893BA', autoridade:false },
+    { id:'s1', nome:'Lucas S. L. P. Santana', cargo:'Assistente Administrativo', mat:'023479', autoridade:false },
+    { id:'s7', nome:'Pedro Fontes Barifaldi Hirs', cargo:'Gerente de Vias Públicas', mat:'', autoridade:false },
+    { id:'s4', nome:'Roberto Fontes Passos Dias', cargo:'Superintendente de Manutenção', mat:'', autoridade:false },
+    { id:'s9', nome:'Sonilda Santana de Mello', cargo:'Secretária Municipal de Saúde', mat:'', autoridade:false, sec:'saude' },
+    { id:'s5', nome:'Vinícius Oliveira Teixeira', cargo:'Gerente de Orçamento e Controle', mat:'', autoridade:false }
   ],
+  secretarias:null,
   orgao:'Secretaria Municipal de Infraestrutura e Defesa Civil de Ilhéus',
   sigla:'SMDIEDC',
   sigLine:false,
@@ -200,7 +208,7 @@ const SETTINGS_PADRAO = () => ({
   lay:null
 });
 let settings = SETTINGS_PADRAO();
-function saveSettings(){ lsSet('settings', settings); kvSet('settings', settings); }
+function saveSettings(){ try{ if(LAY.editando) layHistGuardar(); }catch(e){} lsSet('settings', settings); kvSet('settings', settings); }
 function signatario(id){ return settings.signatarios.find(s => s.id === id) || settings.signatarios[0] || { nome:'', cargo:'', mat:'' }; }
 const cargoLinha = s => s ? (s.cargo || '') + (s.mat ? ' – Matrícula nº ' + s.mat : '') : '';
 
@@ -233,7 +241,8 @@ const ESTILOS = {
   loc:   { size:12, al:'left', bf:12, af:0, kn:1, kl:1 },
   sig1:  { size:12, f:'b', al:'center', bf:ESPACO_ASSIN, af:0, kn:1, kl:1 },
   sig2:  { size:12, f:'b', al:'center', bf:0, af:0, kl:1 },
-  tdoc:  { size:14, f:'b', al:'center', bf:12, af:6, kn:1, kl:1 }
+  tdoc:  { size:14, f:'b', al:'center', bf:12, af:6, kn:1, kl:1 },
+  capa:  { size:16, f:'b', al:'center', bf:250, af:0, kn:1, kl:1, caixa:1, desce:1 }
 };
 const WIN_EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
 const WIN_TROCA = { '≤':'<=', '≥':'>=', '→':'->', '←':'<-', '☐':'( )', '☒':'(X)', '☑':'(X)', '✓':'v', '✔':'v', '\t':' ', ' ':' ', ' ':' ', ' ':' ', ' ':' ', ' ':' ', '​':'', '‐':'-', '‑':'-', '−':'-', 'Ω':'Ohm', 'μ':'u', '′':"'", '″':'"', '∅':'Ø' };
@@ -268,11 +277,13 @@ function titleCase(s){
 }
 
 /* ---------- HTML → blocos ---------- */
+/* marca-texto no PDF e no Word: só quando o Exportar pede "com marcações" */
+let PDF_MARCAS = false;
 function runsDe(no, base, ctx){
   const out = [];
   (function walk(n, st){
     for(const c of Array.from(n.childNodes)){
-      if(c.nodeType === 3){ const t = c.data.replace(/[\r\n\t]+/g, ' '); if(t) out.push({ t, b:st.b, i:st.i, u:st.u, sup:st.sup }); continue; }
+      if(c.nodeType === 3){ const t = c.data.replace(/[\r\n\t]+/g, ' '); if(t) out.push({ t, b:st.b, i:st.i, u:st.u, sup:st.sup, m:st.m }); continue; }
       if(c.nodeType !== 1) continue;
       const tg = c.tagName;
       if(tg === 'BR'){ out.push({ br:true }); continue; }
@@ -284,7 +295,7 @@ function runsDe(no, base, ctx){
       }
       if(c.classList && c.classList.contains('naoimp')) continue;
       const w = (c.getAttribute && c.getAttribute('style')) || '';
-      const s2 = { b: st.b || tg === 'B' || tg === 'STRONG' || /font-weight\s*:\s*(bold|[6-9]00)/i.test(w), i: st.i || tg === 'I' || tg === 'EM', u: st.u || tg === 'U', sup: st.sup || tg === 'SUP' };
+      const s2 = { b: st.b || tg === 'B' || tg === 'STRONG' || /font-weight\s*:\s*(bold|[6-9]00)/i.test(w), i: st.i || tg === 'I' || tg === 'EM', u: st.u || tg === 'U', sup: st.sup || tg === 'SUP', m: st.m || (PDF_MARCAS && tg === 'MARK' && c.classList && c.classList.contains('mt')) };
       walk(c, s2);
     }
   })(no, base || { b:false, i:false, u:false, sup:false });
@@ -340,7 +351,7 @@ function htmlParaBlocos(src, ctx){
       if(c.nodeType !== 1) continue;
       const t = c.tagName, cl = c.classList;
       if(cl && cl.contains('naoimp')) continue;
-      if(t === 'H1'){ const r = R(c, { b:true, i:false, u:false }); if(r.length) out.push({ s:'tit', runs:r, el:c }); continue; }
+      if(t === 'H1'){ const r = R(c, { b:true, i:false, u:false }); if(r.length) out.push({ s:cl && cl.contains('capa') ? 'capa' : 'tit', runs:r, el:c }); continue; }
       if(/^H[2-6]$/.test(t)){ const r = R(c, { b:true, i:false, u:false }); if(r.length) out.push({ s: t === 'H2' ? 'cap' : 'sub', runs:r, el:c }); continue; }
       if(t === 'P'){
         const r = R(c);
@@ -388,6 +399,7 @@ function blocosFecho(d, els){
   }
   out.push({ s:'sig1', runs:[{ t: pes ? titleCase(pes.nome) : '[Signatário]' }], el:els.n1 || null });
   if(pes && pes.cargo) out.push({ s:'sig2', runs:[{ t:pes.cargo }], el:els.n2 || null });
+  if(pes && pes.reg) out.push({ s:'sig2', runs:[{ t:pes.reg }], el:els.n3 || null });
   return out;
 }
 function docTemDataNoTopo(d){ return /class="dt"/.test(d.html || '') || d.tipo === 'of'; }
@@ -397,7 +409,12 @@ function blocosDoc(src, d, ctx, els){
   if(d) bl = bl.map(b => b.s === 'dt' ? Object.assign({}, b, { runs:runsDataTopo(d) }) : b);
   bl = bl.filter(b => b.s !== 'dt' || b.runs.length);
   bl = ajustarSequencia(bl);
-  if(fechoAtivo(d)) bl = bl.concat(blocosFecho(d, els));
+  if(fechoAtivo(d)){
+    /* bloco inseparável: o último parágrafo desce junto com a data e o nome/cargo */
+    const u = bl[bl.length - 1];
+    if(u && u.s !== 'quebra' && u.s !== 'tab') Object.assign(u, { kn:1, kl:1 });
+    bl = bl.concat(blocosFecho(d, els));
+  }
   return bl;
 }
 
@@ -414,7 +431,7 @@ function palavras(runs, F, size, estilo){
       if(/^ +$/.test(p)){ fecha(); continue; }
       atual = atual || { parts:[], w:0 };
       const w = largura(font, p, sz);
-      atual.parts.push({ t:p, font, u:!!r.u, w, sz: r.sup ? sz : null, dy: r.sup ? size * 0.34 : 0, nota: r.nota || null }); atual.w += w;
+      atual.parts.push({ t:p, font, u:!!r.u, m:!!r.m, w, sz: r.sup ? sz : null, dy: r.sup ? size * 0.34 : 0, nota: r.nota || null }); atual.w += w;
     }
   }
   fecha();
@@ -482,7 +499,7 @@ function medir(b, F, G){
   const ind1 = b.s === 'corpo' ? (b.ind || 0) : 0;
   const larg = G.CW - blocoInd;
   const ls = quebrarComRecuo(palavras(b.runs, F, size, e), larg, F, size, ind1);
-  return { tipo:'p', size, lh, x:G.L + blocoInd, w:larg, ind1, ls, bf:e.bf, af:e.af, kn:!!(e.kn || b.kn), kl:!!(e.kl || b.kl), h:ls.length * lh, al:b.al || e.al };
+  return { tipo:'p', size, lh, x:G.L + blocoInd, w:larg, ind1, ls, bf:e.bf, af:e.af, kn:!!(e.kn || b.kn), kl:!!(e.kl || b.kl), h:ls.length * lh, al:b.al || e.al, desce:!!e.desce };
 }
 function medirTabela(b, F, G){
   const size = b.size || 10, pad = 3.5, lh = size * K_ALT * 1.12;
@@ -550,7 +567,8 @@ function paginar(medidos, G, opt){
     return { novas, h: novas.reduce((a, k) => a + (opt.notasM[k - 1] ? opt.notasM[k - 1].h : 0), 0) + (pg.notasH ? 0 : 9) };
   }
   function paragrafo(m){
-    if(!topo) y += antes(m);
+    if(m.desce && topo) y = Math.max(y, (G.H - m.h) / 2 - 30);
+    else if(!topo) y += antes(m);
     const L = m.ls.length; let p = 0;
     while(p < L){
       const falta = L - p, cabe = Math.floor((resta() + 0.01) / m.lh);
@@ -631,11 +649,11 @@ function medirTarja(runs, R, G){
 }
 function desenharTarja(page, T, G){
   const H = page.getHeight(), x = G.L, w = G.CW, yb = 12;
-  page.drawRectangle({ x, y:yb, width:w, height:T.h, color:cor('FAFBFC'), borderColor:cor('CCD1D7'), borderWidth:0.5 });
+  /* sem fundo e sem borda: só o texto em cinza claro (legível na xerox) */
   let yy = H - (yb + T.h) + 3;
   for(const l of T.ls){
     const it = posLinha(l, x + T.pad, w - 2 * T.pad, T.size, 'justify', yy + T.size * 0.93, 0);
-    for(const ww of it.ws){ let cx = ww.x; for(const p of ww.parts){ page.drawText(p.t, { x:cx, y:H - it.y, size:T.size, font:p.font, color:cor('333333') }); cx += p.w; } }
+    for(const ww of it.ws){ let cx = ww.x; for(const p of ww.parts){ page.drawText(p.t, { x:cx, y:H - it.y, size:T.size, font:p.font, color:cor('8E8E93') }); cx += p.w; } }
     yy += T.lh;
   }
 }
@@ -644,6 +662,17 @@ function desenharPagina(page, pg, R, G, extra){
   if(pg.timbre) desenharTimbre(page, R, G);
   const fontReal = f => R.F[f === R.MF.b ? 'b' : f === R.MF.i ? 'i' : f === R.MF.bi ? 'bi' : f === R.MF.h ? 'h' : f === R.MF.hb ? 'hb' : 'r'];
   const linha = (it) => {
+    /* marca-texto: fundo amarelo-esverdeado desbotado atrás das palavras marcadas (o espaço entre duas marcadas também) */
+    it.ws.forEach((w, k) => {
+      let x = w.x;
+      w.parts.forEach((p, j) => {
+        if(p.m){
+          const prox = j === w.parts.length - 1 && it.ws[k + 1] && it.ws[k + 1].parts[0] && it.ws[k + 1].parts[0].m ? it.ws[k + 1].x : x + p.w, sz = p.sz || it.size;
+          page.drawRectangle({ x, y:H - it.y - sz * 0.24, width:Math.max(prox - x, p.w), height:sz * 1.12, color:cor('EEF4BC') });
+        }
+        x += p.w;
+      });
+    });
     for(const w of it.ws){
       let x = w.x;
       for(const p of w.parts){
@@ -775,7 +804,7 @@ const PDFGen = {
       const runs = tarjaRuns(d, o.proc || null);
       if(runs && runs.length) extra.tarja = medirTarja(runs, R, G);
     }
-    for(const pg of paginas){ const page = pdf.addPage([G.W, G.H]); desenharPagina(page, pg, R, G, extra); }
+    paginas.forEach((pg, k) => { const page = pdf.addPage([G.W, G.H]); desenharPagina(page, pg, R, G, extra); const r = d && d.rotF && d.rotF[k]; if(r) page.setRotation(PDFLib.degrees(r)); });
     if(o.title) pdf.setTitle(o.title);
     pdf.setCreator('Panda'); pdf.setProducer('Panda');
     return { bytes: await pdf.save(), pages: paginas };
@@ -1017,7 +1046,7 @@ async function buildDocx(src, d, proc){
     if(r.nota) return `<w:r><w:rPr><w:vertAlign w:val="superscript"/><w:sz w:val="${Math.round(size * 2)}"/></w:rPr><w:footnoteReference w:id="${r.nota}"/></w:r>`;
     const b = r.b || eb, i = r.i || ei;
     const f = fonte ? `<w:rFonts w:ascii="${fonte}" w:hAnsi="${fonte}" w:cs="${fonte}"/>` : '';
-    return `<w:r><w:rPr>${f}${b ? '<w:b/>' : ''}${i ? '<w:i/>' : ''}${r.u ? '<w:u w:val="single"/>' : ''}${r.sup ? '<w:vertAlign w:val="superscript"/>' : ''}<w:sz w:val="${Math.round(size * 2)}"/><w:szCs w:val="${Math.round(size * 2)}"/></w:rPr><w:t xml:space="preserve">${x(r.t)}</w:t></w:r>`;
+    return `<w:r><w:rPr>${f}${b ? '<w:b/>' : ''}${i ? '<w:i/>' : ''}${r.u ? '<w:u w:val="single"/>' : ''}${r.m ? '<w:shd w:val="clear" w:color="auto" w:fill="EEF4BC"/>' : ''}${r.sup ? '<w:vertAlign w:val="superscript"/>' : ''}<w:sz w:val="${Math.round(size * 2)}"/><w:szCs w:val="${Math.round(size * 2)}"/></w:rPr><w:t xml:space="preserve">${x(r.t)}</w:t></w:r>`;
   };
   const jc = { justify:'both', center:'center', left:'left', right:'right' };
   let prevAf = 0, body = '';
@@ -1133,8 +1162,14 @@ const FICHA = [
   ['srp', 'Registro de preços', 'list:SIM_NAO', 'REVIT'],
   ['especie', 'Espécie do aditivo', 'list:ESPECIES', 'REVIT'],
   ['sigla', 'Sigla do objeto', 'text', 'REVIT'],
+  ['pca', 'Plano de Contratações Anual', 'list:PCA_OPC', 'Planejamento'],
+  ['pcaItem', 'Item do PCA (se consta)', 'text', 'Planejamento'],
+  ['necessidade', 'Descrição da necessidade', 'area', 'Planejamento'],
+  ['parcelamento', 'Parcelamento do objeto', 'area', 'Planejamento'],
   ['contratada', 'Contratada', 'text', 'Contrato'],
   ['cnpj', 'CNPJ', 'text', 'Contrato'],
+  ['contratadaEnd', 'Endereço da contratada', 'text', 'Contrato'],
+  ['contratadaResp', 'Responsável pela contratada', 'text', 'Contrato'],
   ['contrato', 'Nº do contrato', 'text', 'Contrato'],
   ['fiscal', 'Fiscal do contrato', 'text', 'Contrato'],
   ['gestor', 'Gestor do contrato', 'text', 'Contrato'],
@@ -1155,12 +1190,14 @@ const FICHA_KEYS = FICHA.map(f => f[0]);
 const MARCADORES = {
   processo:'num', objeto:'objeto', modalidade:'modalidade', setor:'setor', contratada:'contratada', cnpj:'cnpj', contrato:'contrato',
   fiscal:'fiscal', gestor:'gestor', dotacao:'dotacao', valor_inicial:'valorInicial', valor_atual:'valorAtual', medido:'medido', saldo:'saldo',
-  assinatura:'assinatura', inicio:'inicio', prazo:'prazo', termino:'termino', vigencia:'vigencia', concorrencia:'licNum'
+  assinatura:'assinatura', inicio:'inicio', prazo:'prazo', termino:'termino', vigencia:'vigencia', concorrencia:'licNum',
+  necessidade:'necessidade', parcelamento:'parcelamento', contratada_endereco:'contratadaEnd', contratada_responsavel:'contratadaResp', pca_item:'pcaItem'
 };
 const MARC_ROTULO = { processo:'nº do processo', objeto:'objeto', modalidade:'modalidade', setor:'setor', contratada:'contratada', cnpj:'CNPJ', contrato:'nº do contrato',
   fiscal:'fiscal', gestor:'gestor', dotacao:'dotação', valor_inicial:'valor inicial', valor_atual:'valor atualizado', medido:'valor medido', saldo:'saldo',
   assinatura:'data de assinatura', inicio:'data de início', prazo:'prazo', termino:'término', vigencia:'vigência', data:'data', cidade:'cidade', ano:'ano',
-  concorrencia:'nº da concorrência', revit:'nº do REVIT', revit_inicio:'início do REVIT', revit_codigo:'código do REVIT', numint:'numeração interna' };
+  concorrencia:'nº da concorrência', secretaria_demandante:'secretaria demandante', autoridade_demandante:'autoridade da secretaria', cargo_autoridade_demandante:'cargo da autoridade', srp:'registro de preços', revit:'nº do REVIT', revit_inicio:'início do REVIT', revit_codigo:'código do REVIT', numint:'numeração interna',
+  pca:'Plano de Contratações Anual', pca_item:'item do PCA', necessidade:'descrição da necessidade', parcelamento:'parcelamento do objeto', contratada_endereco:'endereço da contratada', contratada_responsavel:'responsável pela contratada' };
 
 /* número por extenso (inteiros até 999.999) */
 function extenso(n){
@@ -1237,6 +1274,11 @@ function marcadorValor(p, k, o){
   if(k === 'revit') return p ? revitNumero(p) : '';
   if(k === 'revit_inicio') return p && revitData(p) ? dataBR(revitData(p)) : '';
   if(k === 'revit_codigo') return p ? revitCodigo(p) : '';
+  if(k === 'secretaria_demandante'){ const s = secretariaDoProc(p); return s ? s.nome : ''; }
+  if(k === 'autoridade_demandante'){ const a = autoridadeDe(p); return a ? titleCase(a.nome) : ''; }
+  if(k === 'cargo_autoridade_demandante'){ const a = autoridadeDe(p); return a ? a.cargo || '' : ''; }
+  if(k === 'srp') return p && p.ficha ? p.ficha.srp || '' : '';
+  if(k === 'pca') return pcaFrase(p);
   const campo = MARCADORES[k]; if(campo) return fichaValor(p, campo);
   const ex = ((p && p.ficha && p.ficha.extras) || []).find(e => chaveExtra(e.k) === k);
   return ex ? ex.v || '' : '';
@@ -1283,7 +1325,7 @@ const MODELOS_PADRAO = () => [
 ];
 const modelos = () => settings.modelos && settings.modelosV === MODELOS_V ? settings.modelos : MODELOS_PADRAO();
 const GRUPOS_MODELO = ['Comunicações', 'Despachos', 'Planejamento da contratação', 'Outros'];
-const TIPO_NOME = { ci:'Comunicação interna', of:'Ofício', nt:'Nota técnica', desp:'Despacho', dfd:'DFD', etp:'ETP', pb:'Projeto básico', tr:'Termo de referência', livre:'Texto', anexo:'Anexo' };
+const TIPO_NOME = { ci:'Comunicação interna', of:'Ofício', nt:'Nota técnica', desp:'Despacho', dfd:'DFD', etp:'ETP', pb:'Projeto básico', tr:'Termo de referência', livre:'Texto', anexo:'Anexo', capa:'Folha-marcador', sol:'Solicitação de demanda', decl:'Declaração de vantajosidade' };
 const tipoDoc = d => d.tipo || ((modelos().find(m => m.id === d.modelo) || {}).tipo) || (d.modelo && /^desp/.test(d.modelo) ? 'desp' : 'livre');
 
 function tplParaHTML(texto, p, o){
@@ -1339,7 +1381,7 @@ function tarjaRuns(d, p){
   if(!pes || s.sem) return null;
   const runs = [{ t:'Signatário: ' }, { t:titleCase(pes.nome), b:true }];
   if(pes.cargo) runs.push({ t:' (' + pes.cargo + ')' });
-  runs.push({ t:', ' + dataExtenso(s.data || hojeISO()) });
+  if(s.modo === 'fisica') runs.push({ t:', ' + dataExtenso(s.data || hojeISO()) });   /* data só na assinatura física */
   const q = procDaTarja(d, p);
   if(q && q.ficha && q.ficha.num){
     const tipo = tipoDoc(d);
@@ -1651,7 +1693,7 @@ function popMenu(ancora, itens, o = {}){
   itens.forEach(it => {
     if(!it) return;
     if(it === '-'){ if(box.lastChild && !box.lastChild.classList.contains('pm-sep')) box.append(h('div', { class:'pm-sep' })); return; }
-    box.append(h('button', { class:'pm-i' + (it.danger ? ' danger' : '') + (it.on ? ' on' : '') + (it.oculto ? ' oculto' : ''), role:'menuitem', disabled:it.off && !edit, onclick:() => { reg.fechar(); if(edit) editarItemMenu(o.chave, it, itens); else it.fn(); } },
+    box.append(h('button', { class:'pm-i' + (it.danger ? ' danger' : '') + (it.on ? ' on' : '') + (it.oculto ? ' oculto' : '') + (it.cls ? ' ' + it.cls : ''), role:'menuitem', disabled:it.off && !edit, onclick:() => { reg.fechar(); if(edit) editarItemMenu(o.chave, it, itens); else it.fn(); } },
       h('span', null, it.t + (it.oculto ? ' (escondido)' : ''), it.sub ? h('small', null, it.sub) : null), it.ic ? h('i', { html:I[it.ic] || '' }) : null));
   });
   if(edit) box.append(h('div', { class:'pm-sep' }), h('button', { class:'pm-i on', onclick:() => { reg.fechar(); adicionarItemMenu(o.chave); } }, h('span', null, '+ Adicionar item'), h('i', { html:I.plus })));
@@ -1851,7 +1893,7 @@ $('fileIn').onchange = e => { const l = [...e.target.files]; e.target.value = ''
 /* inclui arquivos num processo; onde = 'linha' | 'repo' | 'ambos' ; depois = id do doc após o qual inserir */
 async function incluirArquivos(p, list, onde, depois){
   if(!precisaLibs()) return [];
-  const ents = await expandirEntradas(list);
+  const ents = await filtrarGrandes(await expandirEntradas(list));
   if(!ents.length) return [];
   const b = busy('Preparando arquivos…'), novos = [];
   try{
@@ -2381,7 +2423,9 @@ function criarDocumento(o){
   const d = docDeTexto(o);
   d.nome = o.rotulo || (o.m ? o.m.nome.replace(/^LCT\.\d+ · /, '') : titleOf(d.html));
   if(o.anexoDe){ d.pai = o.anexoDe; d.sig.sem = true; }
-  return porNaLinha(o.p, d, o.depois);
+  porNaLinha(o.p, d, o.depois);
+  if(typeof tirarVazio === 'function') tirarVazio(o.p, d);
+  return d;
 }
 function criarTexto(p, m, sigId, depois){ const d = criarDocumento({ p, m, depois }); if(sigId && pessoaPorId(sigId)) d.sig.pessoa = sigId; return d; }
 function optSheet(titulo, grupos, atual){
@@ -2543,10 +2587,12 @@ function depoisDeIncluir(p, d){
 
 /* ---------- Texto pronto: cola o texto e ele sai no padrão MPI ---------- */
 let TP_RASCUNHO = '';
-const TP_TIPOS = [['livre', 'Texto'], ['desp', 'Despacho'], ['ci', 'Comunicação interna'], ['of', 'Ofício'], ['nt', 'Nota técnica'], ['anexo', 'Anexo (sem assinatura)']];
+const TP_TIPOS = [['livre', 'Texto'], ['desp', 'Despacho'], ['dfd', 'DFD'], ['etp', 'ETP'], ['pb', 'Projeto básico'], ['tr', 'Termo de referência'], ['nt', 'Nota técnica'], ['ci', 'Comunicação interna'], ['of', 'Ofício'], ['sol', 'Solicitação de demanda'], ['decl', 'Declaração de vantajosidade'], ['anexo', 'Anexo (sem assinatura)']];
 /* o tipo pelo título: DESPACHO, COMUNICAÇÃO INTERNA, OFÍCIO, NOTA TÉCNICA */
 function tipoPeloTexto(t){
-  const l = norm((String(t || '').split('\n').find(x => x.trim()) || '').slice(0, 80));
+  const prim = (String(t || '').split('\n').find(x => x.trim()) || '').slice(0, 140);
+  const tt = tipoDoTitulo(prim); if(tt && tt !== 'capa' && tt !== 'livre') return tt;
+  const l = norm(prim.slice(0, 80));
   if(/^despacho/.test(l)) return 'desp';
   if(/^(comunicacao interna|c\.?i\.?\b)/.test(l)) return 'ci';
   if(/^oficio/.test(l)) return 'of';
@@ -2563,21 +2609,34 @@ function sigPadraoTP(tipo){
 function textoPronto(o){
   o = o || {};
   const c = ctxNovoDoc(o);
-  const st = { tipo:null, tipoAuto:true, pessoa:'', modo:settings.tpModo || 'eletronica' };
-  const txa = h('textarea', { class:'txa tpTxa', placeholder:'Cole aqui o texto.\n\nA primeira linha vira o título. "De:", "Para:" e "Assunto:" ficam no bloco de cima; o resto vira parágrafos, com o fecho e a assinatura no fim.', spellcheck:'true', lang:'pt-BR' });
+  const st = { tipo:null, tipoAuto:true, pessoa:'', pessoaMudou:false, modo:settings.tpModo || 'eletronica', partes:[] };
+  const phTeor = 'Cole aqui o inteiro teor ou um documento.\n\nCada documento começa pelo título (DESPACHO, DOCUMENTO DE FORMALIZAÇÃO DE DEMANDA, ESTUDO TÉCNICO PRELIMINAR…) ou pela linha === DOCUMENTO: nome ===. O app reconhece e põe cada um no lugar da sequência.';
+  const txa = h('textarea', { class:'txa tpTxa', placeholder:o.teor ? phTeor : 'Cole aqui o texto.\n\nA primeira linha vira o título. "De:", "Para:" e "Assunto:" ficam no bloco de cima; o resto vira parágrafos, com o fecho e a assinatura no fim.\n\nVários documentos de uma vez também servem: o app separa pelos títulos.', spellcheck:'true', lang:'pt-BR' });
+  const info = h('div', { class:'tpTeor', hidden:true });
+  let bPriRef = null;
   txa.value = TP_RASCUNHO;
   const nome = h('input', { class:'inp', placeholder:'Nome na lista (opcional)' });
   const grp = h('div', { class:'sgGrp tpSig' });
   const conta = h('span', { class:'tpConta' });
   const val = (t, fn, v) => { const b = h('button', { class:'sgRow', onclick:() => fn(b) }, h('span', null, t), h('span', { class:'v' }, h('span', null, v), h('i', { html:I.chevD, style:{ display:'flex' } }))); return b; };
   function pinta(){
+    st.partes = txa.value.trim() ? dividirTeor(txa.value) : [];
+    const multi = st.partes.length > 1;
+    info.hidden = !multi;
+    if(multi) info.replaceChildren(h('b', null, plural(st.partes.length, 'documento reconhecido', 'documentos reconhecidos')), h('div', { class:'tpChips' }, st.partes.map(x => h('span', { class:'tpChip' + (x.capa ? ' capa' : '') }, x.nome))));
+    grp.hidden = multi;
+    if(typeof lblNome !== 'undefined'){ lblNome.hidden = multi; nome.hidden = multi; dica.textContent = multi ? (c.p && temEsqueleto(c.p) ? 'Cada documento entra no lugar dele na sequência; o que não tiver lugar entra na ordem colada.' : 'Os documentos entram na ordem colada, cada um com as suas caixinhas de anexo.') : dicaSimples; }
+    if(bPriRef && c.p){ const t = multi ? 'Montar ' + st.partes.length + ' documentos' : 'Entrar no processo'; if(bPriRef.textContent !== t) bPriRef.textContent = t; }
     if(st.tipoAuto){ const t = tipoPeloTexto(txa.value); st.tipo = t || 'livre'; }
+    /* fecho solto no fim do texto colado: o signatário vem dele (se ainda não foi escolhido à mão) */
+    const p0 = !multi && st.partes[0]; st.novo = null;
+    if(p0 && !st.pessoaMudou){ if(p0.pessoa !== undefined) st.pessoa = p0.pessoa; else if(p0.novo) st.novo = p0.novo; }
     if(!st.pessoa) st.pessoa = sigPadraoTP(st.tipo);
     const pes = pessoaPorId(st.pessoa), nT = (TP_TIPOS.find(x => x[0] === st.tipo) || TP_TIPOS[0])[1];
     grp.replaceChildren(
       val('Tipo', b => popMenu(b, TP_TIPOS.map(([k, t]) => ({ t, on:st.tipo === k, fn:() => { st.tipo = k; st.tipoAuto = false; if(k === 'anexo') st.pessoa = '__sem'; pinta(); } }))), nT + (st.tipoAuto && st.tipo !== 'livre' ? ' (pelo título)' : '')),
-      val('Signatário', b => popMenu(b, (settings.signatarios || []).map(x => ({ t:titleCase(x.nome), sub:x.cargo, on:st.pessoa === x.id, fn:() => { st.pessoa = x.id; pinta(); } })).concat(['-', { t:'Sem assinatura', sub:'anexo, planilha', on:st.pessoa === '__sem', fn:() => { st.pessoa = '__sem'; pinta(); } }])),
-        st.pessoa === '__sem' ? 'Sem assinatura' : pes ? titleCase(pes.nome) : 'Escolher'),
+      val('Signatário', b => menuSignatario(b, st.novo ? null : st.pessoa, id => { st.pessoa = id; st.pessoaMudou = true; st.novo = null; pinta(); }, { sem:true, pre:st.novo }),
+        st.novo ? titleCase(st.novo.nome) + ' (novo)' : st.pessoa === '__sem' ? 'Sem assinatura' : pes ? titleCase(pes.nome) : 'Escolher'),
       st.pessoa === '__sem' ? null : val('Assinatura', b => popMenu(b, [['eletronica', 'Eletrônica', 'data da assinatura eletrônica'], ['fisica', 'Física (caneta)', 'com a data de hoje']].map(([k, t, sub]) => ({ t, sub, on:st.modo === k, fn:() => { st.modo = k; pinta(); } }))), st.modo === 'fisica' ? 'Física · hoje' : 'Eletrônica'));
     const L = txa.value.split('\n').filter(x => x.trim()).length;
     conta.textContent = L ? plural(L, 'linha', 'linhas') : '';
@@ -2594,14 +2653,23 @@ function textoPronto(o){
     h('button', { class:'btn sm', onclick:colar }, h('span', { html:I.paste }), 'Colar'),
     conta,
     h('button', { class:'btn sm ghost', onclick:() => { txa.value = ''; TP_RASCUNHO = ''; st.tipoAuto = true; pinta(); txa.focus(); } }, 'Limpar'));
+  const dicaSimples = c.p ? (c.atual ? 'Entrar no processo: fica logo depois de "' + c.atual.nome + '". Depois dá para arrastar ≡.' : 'Entrar no processo: fica no fim da lista. Depois dá para arrastar ≡.')
+    : c.mesaPdf ? 'Pôr na mesa: vira folha de PDF, pronta para carimbar e numerar.' : 'Exportar guarda uma cópia em Documentos avulsos.';
   const dica = h('p', { class:'ndOnde' }, c.p ? (c.atual ? 'Entrar no processo: fica logo depois de "' + c.atual.nome + '". Depois dá para arrastar ≡.' : 'Entrar no processo: fica no fim da lista. Depois dá para arrastar ≡.')
     : c.mesaPdf ? 'Pôr na mesa: vira folha de PDF, pronta para carimbar e numerar.' : 'Exportar guarda uma cópia em Documentos avulsos.');
-  const s = sheet({ titulo:'Texto pronto', cheio:true, corpo:[barra, txa, grp, h('div', { class:'lbl' }, 'Nome'), nome, dica] });
+  const lblNome = h('div', { class:'lbl' }, 'Nome');
+  const s = sheet({ titulo:o.teor ? 'Inteiro teor' : 'Texto pronto', cheio:true, corpo:[barra, txa, info, grp, lblNome, nome, dica] });
   pinta();
   /* o documento com o que está na caixa */
   function montar(p){
-    const t = txa.value;
+    let t = txa.value;
     if(!t.trim()){ toast('Cole o texto primeiro.'); txa.focus(); return null; }
+    /* "Ilhéus, data" e nome/cargo soltos no fim saem do texto: o fecho entra sozinho (senão ficava repetido) */
+    if(!htmlDoTexto(t)){
+      const f = tirarFechoLinhas(t.replace(/\r/g, '').split('\n').filter(l => !/^\s*@signat[aá]rio\s*:/i.test(l)));
+      if(f.linhas.some(l => l.trim())) t = f.linhas.join('\n');
+      if(st.novo && !st.pessoaMudou){ st.pessoa = garantirSignatario(st.novo); st.novo = null; }
+    }
     const sem = st.pessoa === '__sem';
     const sig = novoSig(sem ? null : st.pessoa || null, { sem, modo:st.modo, data:st.modo === 'fisica' ? hojeISO() : null, vinculo:!!(p && !p.avulsa && !p.avdoc) });
     const d = docDeTexto({ p, m:modelos().find(x => x.id === 'livre') || null, texto:t, tipo:st.tipo, sig, semCab:true });
@@ -2612,10 +2680,22 @@ function textoPronto(o){
   function pronto(){ TP_RASCUNHO = ''; lembrar(); s.fechar(); }
   async function ver(){
     if(!precisaLibs()) return;
+    if(st.partes.length > 1){ previaDoc(docDaParte(st.partes[0], c.p), c.p); toast('A prévia mostra o primeiro documento.'); return; }
     const d = montar(c.p); if(!d) return;
     previaDoc(d, c.p);
   }
   function entrar(p, depois){
+    if(!txa.value.trim()){ toast('Cole o texto primeiro.'); txa.focus(); return; }
+    if(st.partes.length > 1 || temEsqueleto(p)){
+      const partes = st.partes.length ? st.partes : dividirTeor(txa.value);
+      if(partes.length === 1 && !st.tipoAuto) partes[0].tipo = st.tipo;
+      const res = encaixarTeor(p, partes, { depois, sig:st.pessoaMudou ? st.pessoa : undefined });
+      res.forEach(r => { const sg = r.d.sig; if(r.d.kind === 'texto' && sg && !sg.sem && (r.novo || partes.length === 1)){ sg.modo = st.modo; sg.data = st.modo === 'fisica' ? hojeISO() : null; } });
+      if(partes.length === 1 && nome.value.trim() && res[0]) res[0].d.nome = nome.value.trim();
+      saveDB(true); pronto();
+      depoisDeMontar(p, res);
+      return;
+    }
     const d = montar(p); if(!d) return;
     porNaLinha(p, d, depois || null);
     pronto(); marcarUltimo(p);
@@ -2636,6 +2716,7 @@ function textoPronto(o){
   }
   async function exportar(como){
     if(!precisaLibs()) return;
+    if(st.partes.length > 1) return toast('São vários documentos: entre no processo e exporte de lá.');
     const d = montar(c.p); if(!d) return;
     const q = copiaAvulsa(d);
     if(c.p){ d.sig.vinculo = c.p.id; }
@@ -2644,6 +2725,7 @@ function textoPronto(o){
   }
   async function porNaMesa(){
     if(!precisaLibs()) return;
+    if(st.partes.length > 1) return toast('Para vários documentos, entre num processo.');
     const d = montar(null); if(!d) return;
     const b = busy('Pondo na mesa…');
     let bytes;
@@ -2654,7 +2736,7 @@ function textoPronto(o){
     b.end();
     if(f && f.d){ av.docs = av.docs.filter(x => x !== nd); const i = av.docs.indexOf(f.d); av.docs.splice(i + 1, 0, nd); }
     touch(av); saveDB(true); pronto();
-    if(VIEW === 'mesa' && M.p === av){ renderMesa(true); setTimeout(() => { irParaDoc(nd.id); if(!M.fsel) entrarSelecao(false, 'pdf'); else renderSelBar(); }, 90); }
+    if(VIEW === 'mesa' && M.p === av){ renderMesa(true); setTimeout(() => { irParaDoc(nd.id); if(M.fsel) renderSelBar(); }, 90); }
     else abrirMesa(av, { pdf:true, doc:nd.id });
     toast('Texto na mesa de PDF.');
   }
@@ -2668,6 +2750,7 @@ function textoPronto(o){
   const bPri = c.p ? h('button', { class:'btn acc', onclick:() => entrar(c.p, c.atual ? (c.atual.pai || c.atual.id) : null) }, 'Entrar no processo')
     : c.mesaPdf ? h('button', { class:'btn acc', onclick:porNaMesa }, 'Pôr na mesa')
       : h('button', { class:'btn acc', onclick:entrarEmOutro }, 'Entrar num processo');
+  bPriRef = bPri; pinta();
   s.el.append(h('div', { class:'shf tpPe' }, bVer, bExp, bPri));
   setTimeout(() => { if(!txa.value) txa.focus(); }, 120);
 }
@@ -2695,11 +2778,12 @@ function inputMoney(v){
   return i;
 }
 function fichaSheet(p, o = {}){
+  if(!p && !o.completa) return aberturaSheet(o);
   const novo = !p;
   const base = p ? p.ficha : { extras:[], setor:settings.setor || '' };
   const campos = {};
-  const listas = { MODALIDADES, SETORES, TIPOS_OBJ, MOD_COD, ESPECIES, SIM_NAO };
-  const SELECTS = ['TIPOS_OBJ', 'MOD_COD', 'ESPECIES', 'SIM_NAO'];
+  const listas = { MODALIDADES, SETORES, TIPOS_OBJ, MOD_COD, ESPECIES, SIM_NAO, PCA_OPC };
+  const SELECTS = ['TIPOS_OBJ', 'MOD_COD', 'ESPECIES', 'SIM_NAO', 'PCA_OPC'];
   const corpo = [];
   let grupo = null, box = null, revitLbl = null;
   if(novo) corpo.push(h('p', { class:'muted', style:{ margin:0, fontSize:'13.5px' } }, 'Preencha o que já souber. Tudo o que você colocar aqui entra sozinho nos despachos, na nota técnica, no DFD, no ETP e no TR. Dá para pular e preencher depois.'));
@@ -2719,6 +2803,7 @@ function fichaSheet(p, o = {}){
     if(k === 'saldo' || k === 'valorAtual' || k === 'termino') inp.placeholder = k === 'saldo' ? 'Calculado se vazio' : k === 'valorAtual' ? 'Igual ao inicial se vazio' : 'Início + prazo se vazio';
     campos[k] = { inp, tipo };
     box.append(h('label', { class:'fld' + (tipo === 'area' || k === 'num' ? ' w2' : '') }, h('span', null, rot), inp));
+    if(k === 'contratada') box.append(h('button', { class:'btn sm soft', style:{ alignSelf:'end' }, onclick:ev => menuContratada(ev.currentTarget, inp.value, x => { const pc = patchContratada(x); ['contratada', 'cnpj', 'contratadaEnd', 'contratadaResp'].forEach(c => { if(campos[c]) campos[c].inp.value = pc[c]; }); }) }, 'Cadastro de contratadas'));
     if(k === 'num'){ box.append(h('label', { class:'fld' }, h('span', null, 'Categoria'), catSel), h('label', { class:'fld' }, h('span', null, 'Situação'), stSel)); }
   }
   const prevRevit = () => {
@@ -2737,7 +2822,7 @@ function fichaSheet(p, o = {}){
   corpo.push(extras, h('button', { class:'btn sm soft', style:{ alignSelf:'flex-start' }, onclick:() => addExtra() }, h('span', { html:I.plus }), 'Campo extra'));
   corpo.push(h('p', { class:'muted', style:{ margin:0, fontSize:'12.5px' } }, 'Campo extra entra nos modelos como {{nome_do_campo}}.'));
   const ler = () => {
-    const f = { extras:[] };
+    const f = Object.assign({}, base || {}, { extras:[] }); FICHA_KEYS.forEach(k => delete f[k]);   /* guarda o que não está no formulário (secretaria, revitSeq…) */
     for(const k in campos){ const c = campos[k]; let v = c.inp.value.trim(); if(c.tipo === 'money'){ const n = numBR(v); v = n == null ? '' : String(Math.round(n * 100) / 100); } f[k] = v; }
     extras.querySelectorAll('.row').forEach(r => { const k = r._k.value.trim(), v = r._v.value.trim(); if(k) f.extras.push({ k, v }); });
     return f;
@@ -2756,6 +2841,7 @@ function fichaSheet(p, o = {}){
     if(VIEW === 'mesa' && M.p === p) salvarTudo();
     const antes = clone(p.ficha);
     if(f.revitInicio && (f.revitInicio !== antes.revitInicio || !antes.revitSeq)) f.revitSeq = revitSeqLivre(f.revitInicio, p); else f.revitSeq = antes.revitSeq;
+    if(f.contratada) garantirContratada({ nome:f.contratada, cnpj:f.cnpj, end:f.contratadaEnd, resp:f.contratadaResp });
     p.ficha = f; p.cat = catSel.value; p.status = stSel.value; p.fls0 = parseInt(fls.value, 10) || 1; touch(p);
     const n = replicarFicha(p, antes);
     saveDB(true);
@@ -2959,14 +3045,13 @@ function abrirMesa(p, o = {}){
   aplicarBarras();
   renderMesa();
   if(o.doc) setTimeout(() => { irParaDoc(o.doc); if(o.focar) focarDoc(o.doc); }, 60);
-  if(o.pdf && p.docs.some(d => d.linha && d.kind === 'pdf')) setTimeout(() => entrarSelecao(false, 'pdf'), 120);
 }
 /* copia o que está na tela para os dados (só quando a mesa está aberta e é deste processo) */
 function salvarTudo(){
   if(!M.p || VIEW !== 'mesa' || pagesEl.dataset.proc !== M.p.id) return;
   limparFolhaTmp(true);
   for(const k in salvarT) clearTimeout(salvarT[k]);
-  pagesEl.querySelectorAll('.page.txt .body').forEach(b => { const d = docById(b.parentElement.dataset.doc); if(d) d.html = b.innerHTML; });
+  pagesEl.querySelectorAll('.page.txt .body').forEach(b => { const d = docById(b.parentElement.dataset.doc); if(d) d.html = htmlDoBody(b); });
   saveDB(true);
 }
 /* grava só os textos que ainda tinham digitação pendente */
@@ -2976,16 +3061,17 @@ function descarregar(){
     if(!salvarT[id]) continue;
     clearTimeout(salvarT[id]); salvarT[id] = 0;
     const d = docById(id), pg = paginaEl(id);
-    if(d && pg) d.html = pg.querySelector('.body').innerHTML;
+    if(d && pg) d.html = htmlDoBody(pg.querySelector('.body'));
   }
 }
 function largarMesa(){
-  salvarTudo(); pararRolagem(); fecharPainel(true);
+  salvarTudo(); if(typeof limparVazios === 'function') limparVazios(M.p); pararRolagem(); fecharPainel(true);
   if(M.fsel) sairSelecao(true);
   pagesEl.replaceChildren(); pagesEl.dataset.proc = ''; M.p = null; esconderCaret();
   M.split = false; M.docAberto = null; ajustarSplit();
 }
 function sairMesa(){
+  buscaFechar(); fecharComentario();
   salvarTudo(); pararRolagem(); fecharPainel(true);
   if(M.fsel) sairSelecao(true);
   const volta = M.voltar && procPorId(M.voltar);
@@ -3053,6 +3139,8 @@ function renderMesa(manterScroll){
   if(M.fsel) pintarSelecao();
   atualizarCaret();
   if(typeof aplicarLayUI === 'function') aplicarLayUI();
+  if(typeof pintarSelos === 'function') pintarSelos();
+  if(BUSCA.bar && BUSCA.q) buscar(BUSCA.q, true);
 }
 function aplicarLarguras(){
   const w = Math.round(Math.min((docEl.clientWidth || window.innerWidth) * 0.88, 820));   /* folha travada em 88% */
@@ -3085,6 +3173,7 @@ async function desenharPg(pg){
   const pdf = await getPdf(d.fileId, bytes);
   await desenharPaginaPdf(pg.querySelector('canvas'), pdf, e, w);
   pg._key = key;
+  try{ await aposDesenharPdf(pg, pdf, e, w); }catch(err){ console.warn('camada de texto', err); }
   const ld = pg.querySelector('.ld'); if(ld) ld.textContent = '';
 }
 function redesenharVisiveis(){
@@ -3099,11 +3188,13 @@ function ligarTexto(body, d){
   body.addEventListener('input', () => {
     if(body.querySelector('p.tmpP')) limparFolhaTmp(false);
     body.querySelectorAll('.campo,.fc.vazio').forEach(c => { if(!/^\[.*\]$/.test(c.textContent.trim())){ c.classList.remove('campo'); c.classList.remove('vazio'); } });
-    clearTimeout(salvarT[d.id]); salvarT[d.id] = setTimeout(() => { salvarT[d.id] = 0; if(body.isConnected){ d.html = body.innerHTML; touch(M.p); saveDB(); } }, 450);
+    clearTimeout(salvarT[d.id]); salvarT[d.id] = setTimeout(() => { salvarT[d.id] = 0; if(body.isConnected){ d.html = htmlDoBody(body); touch(M.p); saveDB(); } }, 450);
     clearTimeout(diagT[d.id]); diagT[d.id] = setTimeout(() => diagramar(d), 900);
   });
   body.addEventListener('paste', e => {
     const cd = e.clipboardData; if(!cd) return;
+    /* inteiro teor marcado (bolinha i ou o texto todo): o que se cola substitui o documento e sai no padrão */
+    if(typeof colarNoInteiro === 'function' && colarNoInteiro(body, d, cd)){ e.preventDefault(); return; }
     const html = htmlDeColagem(cd);
     if(html == null) return;
     e.preventDefault();
@@ -3117,6 +3208,7 @@ function ligarTexto(body, d){
     document.execCommand('insertHTML', false, html || '');
   });
   body.addEventListener('click', e => {
+    if(typeof tocarCampo === 'function') return tocarCampo(e, body, d);
     const c = e.target.closest('.campo,.fc.vazio');
     if(c && !M.editing) selecionarNo(c);
   });
@@ -3130,7 +3222,7 @@ function diagramar(d){
     const body = pg.querySelector('.body');
     try{
       prepararCorpo(body, d);
-      const fe = pg.querySelector('.fecho'), els = fe ? { loc:fe.querySelector('.loc'), n1:fe.querySelector('.n1'), n2:fe.querySelector('.n2') } : null;
+      const fe = pg.querySelector('.fecho'), els = fe ? { loc:fe.querySelector('.loc'), n1:fe.querySelector('.n1'), n2:fe.querySelector('.n2:not(.n3)'), n3:fe.querySelector('.n3') } : null;
       const r = await diagramarTexto(body, d, els);
       M.quebras[d.id] = r.quebras;
       mostrarNotas(pg, r.notas);
@@ -3143,21 +3235,102 @@ function diagramar(d){
   return diagFila;
 }
 function diagramarTudo(){ if(!M.p) return; M.p.docs.filter(d => d.linha && d.kind === 'texto').forEach(d => diagramar(d)); }
+/* ---------- paginação na tela como no Word (Etapa 1) ----------
+   Cada quebra vira um "vão" dentro do próprio texto: o fim da folha (com a tarja), a faixa cinza
+   "fim da folha N" e o topo da folha seguinte (com o timbre). O texto continua no mesmo parágrafo,
+   só que na folha de baixo, exatamente onde o PDF quebra. */
+const GAP_PX = 30;
+const brkIni = b => b.offsetTop + (b._ini || 0);
+/* HTML do corpo sem os vãos de paginação (é o que se guarda) */
+function htmlDoBody(body){
+  if(!body) return '';
+  if(!body.querySelector('.pgap, .fcEd')) return body.innerHTML;
+  const c = body.cloneNode(true); c.querySelectorAll('.pgap').forEach(x => x.remove()); c.normalize();
+  c.querySelectorAll('.fcEd').forEach(x => { x.classList.remove('fcEd'); ['contenteditable', 'inputmode', 'enterkeyhint'].forEach(a => x.removeAttribute(a)); });
+  return c.innerHTML;
+}
+/* começo da n-ésima linha (0 = primeira) de um bloco na tela */
+function inicioDaLinha(el, n){
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), r = document.createRange();
+  let t, tops = [], last = null;
+  while((t = w.nextNode())){
+    if(t.parentElement && t.parentElement.closest('.pgap')) continue;
+    const s = t.data;
+    for(let i = 0; i < s.length; i++){
+      if(/\s/.test(s[i])) continue;
+      if(i > 0 && !/\s/.test(s[i - 1])) continue;
+      r.setStart(t, i); r.setEnd(t, i + 1);
+      const rc = r.getBoundingClientRect(); if(!rc.height) continue;
+      const top = Math.round(rc.top);
+      if(last == null || top > last + 2){ tops.push({ node:t, off:i, top }); last = top; }
+      if(tops.length > n) return tops[n];
+    }
+  }
+  return null;
+}
+function tirarVaos(pg){
+  const g = pg.querySelectorAll('.pgap'); if(!g.length) return;
+  const sel = guardarSel();
+  g.forEach(x => x.remove());
+  pg.querySelectorAll('.body').forEach(b => b.normalize());
+  voltarSel(sel);
+}
+function novoVao(d, fl, timbre){
+  const runs = tarjaRuns(d, M.p);
+  const g = h('span', { class:'brk pgap naoimp', contenteditable:'false', 'aria-hidden':'true' },
+    h('span', { class:'pgTarja', html: runs ? runsHTML(runs) : '' }),
+    h('span', { class:'pgFim' }, 'fim da folha ' + (fl - 1)),
+    timbre ? h('span', { class:'pgTimbre' }, h('img', { src:BRAS_SRC, alt:'' }), timbreLinhas().map(t => h('b', null, t)), timbreLinhas().length ? h('i', { class:'rule' }) : null) : null,
+    h('span', { class:'fl' }, 'fls. ' + fl));
+  g.addEventListener('mousedown', e => e.preventDefault());
+  return g;
+}
 function marcar(d){
   const pg = paginaEl(d.id); if(!pg) return;
-  pg.querySelectorAll('.brk').forEach(b => b.remove());
-  const q = M.quebras[d.id] || [], W = pg.clientWidth, k = W / PAG.retrato.W, r0 = pg.getBoundingClientRect();
+  tirarVaos(pg);
+  const q = M.quebras[d.id] || [], W = pg.clientWidth;
   const f = M.fls[d.id] || { ini:1 };
+  const modo = modoTimbre(d.bras);
+  const sel = guardarSel();
+  const vaos = [];
   q.forEach((x, j) => {
-    let y = null;
+    const g = novoVao(d, f.ini + j + 1, modo === 'todas');
+    let posto = false;
     if(x.el && pg.contains(x.el)){
-      const r = x.el.getBoundingClientRect(); y = r.top - r0.top;
-      if(x.el.tagName === 'TABLE'){ const rows = Array.from(x.el.querySelectorAll('tr')).filter(tr => tr.closest('table') === x.el && tr.querySelector('td,th')); const tr = rows[x.ri >= 0 ? x.ri : 0]; if(tr) y = tr.getBoundingClientRect().top - r0.top; }
-      else y += (x.linhas || 0) * (x.lh || 15.86) * k;
+      if(x.el.tagName === 'TABLE'){
+        const rows = Array.from(x.el.querySelectorAll('tr')).filter(tr => tr.closest('table') === x.el && tr.querySelector('td,th'));
+        if(x.ri > 0 && rows[x.ri]){ /* dentro da tabela: marca fina em cima da linha */
+          g.classList.add('fina'); g.style.top = (rows[x.ri].getBoundingClientRect().top - pg.getBoundingClientRect().top) + 'px'; pg.append(g); posto = true;
+        } else { x.el.before(g); posto = true; }
+      } else if(x.linhas > 0){
+        const pt = inicioDaLinha(x.el, x.linhas);
+        if(pt){ const resto = pt.node.splitText(pt.off); resto.before(g); posto = true; }
+        else { x.el.after(g); posto = true; }
+      } else { x.el.before(g); posto = true; }
     }
-    if(y == null) y = (j + 1) * W * 1.4142;
-    pg.append(h('div', { class:'brk', style:{ top:Math.round(y) + 'px' } }, h('span', { class:'fl' }, 'fls. ' + (f.ini + j + 1))));
+    if(!posto){ g.classList.add('fina'); g.style.top = Math.round((j + 1) * W * 1.4142) + 'px'; pg.append(g); }
+    g.classList.toggle('bloco', !g.classList.contains('fina') && g.parentElement && !g.parentElement.matches('p,li,td,th,h1,h2,h3,blockquote,b,i,u,em,strong,span'));
+    vaos.push(g);
   });
+  /* alturas: fim da folha + faixa + topo da próxima */
+  const Hp = W * 1.4142, cq = W / 100, tarjaMin = cq * 2.016 + 2;
+  let topo = 0;
+  vaos.forEach(g => {
+    if(g.classList.contains('fina')) return;
+    const th = g.querySelector('.pgTarja').offsetHeight || cq * 3;
+    let pb = topo + Hp - g.offsetTop;
+    pb = Math.max(pb, tarjaMin + th + 4);
+    const ph = g.querySelector('.pgTimbre') ? cq * 23.809 : cq * 9.523;
+    g.style.setProperty('--pb', pb + 'px'); g.style.setProperty('--gap', GAP_PX + 'px'); g.style.setProperty('--ph', ph + 'px');
+    g.style.height = (pb + GAP_PX + ph) + 'px';
+    g._ini = pb + GAP_PX;
+    topo = g.offsetTop + pb + GAP_PX;
+  });
+  pg.style.minHeight = Math.round(topo + Hp) + 'px';
+  voltarSel(sel);
+  if(typeof pintarGiros === 'function') pintarGiros(d);
+  if(M.p && M.p.avulsa && typeof pintarCarimbos === 'function') pintarCarimbos();
+  if(typeof atualizarCaret === 'function') atualizarCaret();
 }
 function marcarTodos(){ if(M.p) M.p.docs.filter(d => d.linha && d.kind === 'texto').forEach(marcar); }
 
@@ -3170,7 +3343,7 @@ function mapaPaginas(){
     L.push({ pg, d, top, bot });
     const lab = pg.previousElementSibling;
     A.push(lab && lab.classList.contains('dlabel') ? lab.offsetTop : top);
-    if(d.kind === 'texto') pg.querySelectorAll('.brk').forEach(b => A.push(top + b.offsetTop));
+    if(d.kind === 'texto') pg.querySelectorAll('.brk').forEach(b => A.push(top + brkIni(b)));
   });
   M.pgList = L; M.anchors = A.sort((a, b) => a - b);
   /* espaço no fim só do tamanho necessário para o último documento também parar com o nome no topo */
@@ -3227,7 +3400,7 @@ function irParaFolha(n){
     const f = F[d.id]; if(!f || n < f.ini || n > f.fim) continue;
     const k = n - f.ini;
     if(d.kind === 'pdf'){ const pgs = Array.from(pagesEl.querySelectorAll('.page.pdf[data-doc="' + d.id + '"]')); const pg = pgs[k]; if(pg) docEl.scrollTop = pg.offsetTop - 10; }
-    else { const pg = paginaEl(d.id); if(pg){ const b = pg.querySelectorAll('.brk')[k - 1]; docEl.scrollTop = pg.offsetTop + (b ? b.offsetTop : 0) - 10; } }
+    else { const pg = paginaEl(d.id); if(pg){ const b = pg.querySelectorAll('.brk')[k - 1]; docEl.scrollTop = pg.offsetTop + (b ? brkIni(b) : 0) - 10; } }
     aoRolar(); return true;
   }
   return false;
@@ -3511,21 +3684,7 @@ $('fmt').addEventListener('click', e => {
   if(f === 'h2' || f === 'p') document.execCommand('formatBlock', false, f === 'h2' ? 'h2' : 'p');
   else document.execCommand(f, false, null);
 });
-function buscarNoProcesso(){
-  perguntar('Buscar no processo', 'Palavra ou trecho', '', 'Buscar').then(q => {
-    if(!q) return;
-    const n = norm(q);
-    for(const d of M.p.docs.filter(x => x.linha && x.kind === 'texto')){
-      const b = bodyDoDoc(d); if(!b) continue;
-      const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); let t;
-      while((t = w.nextNode())){
-        const i = norm(t.data).indexOf(n);
-        if(i >= 0){ const r = document.createRange(); r.setStart(t, i); r.setEnd(t, Math.min(t.data.length, i + q.length)); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); const rc = r.getBoundingClientRect(), r0 = docEl.getBoundingClientRect(); docEl.scrollTop += rc.top - r0.top - docEl.clientHeight / 3; aoRolar(); return; }
-      }
-    }
-    toast('Não encontrei “' + q + '” nos textos deste processo.');
-  });
-}
+function buscarNoProcesso(){ buscaAbrir(); }
 
 /* ---------- toques nos botões: usar ou editar ---------- */
 let apertado = null;
@@ -3686,7 +3845,6 @@ function incluirPdfNaMesa(){
     if(onde !== 'repo') fecharPainel();
     renderMesa(true); if(M.painel) renderPainel();
     if(onde !== 'repo') irParaDoc(novos[0].id);
-    if(p.avulsa && !M.fsel) setTimeout(() => entrarSelecao(false, 'pdf'), 150);
     toast(novos.length === 1 ? 'PDF incluído' + (onde === 'repo' ? ' no repositório.' : onde === 'ambos' ? ' na linha e no repositório.' : '.') : novos.length + ' PDFs incluídos.');
   });
 }
@@ -3832,7 +3990,7 @@ function extrairSheet(d){
     ] });
 }
 /* ---------- saídas de um documento ---------- */
-function htmlDoc(d){ const b = bodyDoDoc(d); return b ? b.innerHTML : d.html || ''; }
+function htmlDoc(d){ const b = bodyDoDoc(d); return b ? htmlDoBody(b) : d.html || ''; }
 function textoPuro(b){
   if(!b) return '';
   const c = b.cloneNode(true);
@@ -4259,10 +4417,11 @@ function fechoEl(d){
   if(!fechoAtivo(d)) return h('div', { class:'fecho sem' });
   const s = d.sig || {}, pes = s.pessoa ? pessoaPorId(s.pessoa) : null;
   const box = h('div', { class:'fecho', title:'Toque para escolher o signatário' });
-  box.addEventListener('click', () => { if(!M.fsel) sigSheet(d); });
+  box.addEventListener('click', ev => tocarFecho(d, ev));
   if(!docTemDataNoTopo(d)) box.append(h('div', { class:'loc', html:runsHTML(runsDataTopo(d)) }));
   box.append(h('div', { class:'n1' + (pes ? '' : ' vazio') }, pes ? titleCase(pes.nome) : '[Signatário: toque para escolher]'));
   if(pes && pes.cargo) box.append(h('div', { class:'n2' }, pes.cargo));
+  if(pes && pes.reg) box.append(h('div', { class:'n2 n3' }, pes.reg));
   return box;
 }
 function tarjaEl(d){
@@ -4294,7 +4453,7 @@ function atualizarFecho(d){
 }
 
 /* ---------- cursor fixo (sem piscar) com bolinha vermelha ---------- */
-function caretEl(){ let c = $('caret'); if(!c || !pagesEl.contains(c)){ if(c) c.remove(); c = h('div', { id:'caret', 'aria-hidden':'true' }); pagesEl.append(c); } return c; }
+function caretEl(){ let c = $('caret'); if(!c || !pagesEl.contains(c)){ if(c) c.remove(); const bola = h('i', { class:'bola' }, h('img', { src:PANDA_SRC, alt:'' })); c = h('div', { id:'caret', 'aria-hidden':'true' }, bola); pagesEl.append(c); if(typeof ligarBola === 'function') ligarBola(bola); } return c; }
 function esconderCaret(){ const c = $('caret'); if(c) c.hidden = true; }
 function rectDoCursor(s){
   let n = s.focusNode, o = s.focusOffset;
@@ -4317,6 +4476,7 @@ function rectDoCursor(s){
   return { left, top:b.top + (parseFloat(cs.paddingTop) || 0), height:fs * 1.15 };
 }
 function atualizarCaret(){
+  if(DRAG) return;   /* arrastando o pandinho: o cursor fica quieto */
   if(VIEW !== 'mesa' || !M.p) return esconderCaret();
   const s = window.getSelection();
   if(M.fsel || !s || !s.rangeCount || !s.isCollapsed || !s.focusNode) return esconderCaret();
@@ -4371,9 +4531,10 @@ function inicioPalavraAnt(S, i){ i--; while(i >= 0 && ESP(S[i])) i--; while(i > 
 const ABREV = new Set(['sr', 'sra', 'srs', 'dr', 'dra', 'art', 'arts', 'inc', 'incs', 'n', 'nº', 'no', 'fls', 'fl', 'p', 'pp', 'pág', 'págs', 'ex', 'exa', 'exmo', 'exma', 'etc', 'obs', 'prof', 'profa', 'eng', 'av', 'r', 'tel', 'cf', 'id', 'ib', 'op', 'cit', 'séc', 'v', 'vs', 'ltda', 'sa', 'cia', 'min', 'máx', 'aprox', 'ref', 'proc', 'adm', 'sec', 'mun', 'gov', 'jr', 'lc', 'ss', 'inc', 'al', 'dec', 'res', 'port', 'arq', 'cód', 'nº.', 'item', 'itens', 'anexo']);
 function fimDeFrase(S, i){
   const ch = S[i];
-  if(!'.?!:'.includes(ch)) return false;
+  if(!'.?!:;…'.includes(ch)) return false;
   const nx = S[i + 1];
   if(!(nx == null || ESP(nx) || /["”')\]]/.test(nx))) return false;
+  if(ch === '.' && S[i - 1] === '.') return true;   /* reticências */
   if(ch === '.'){
     let k = i - 1, w = ''; while(k >= 0 && /[\p{L}º°ª]/u.test(S[k])){ w = S[k] + w; k--; }
     if(w && (ABREV.has(w.toLowerCase()) || (w.length === 1 && /[A-ZÀ-Ý]/.test(w)))) return false;
@@ -4433,8 +4594,9 @@ function navPalavra(dir){
 
 /* ---------- ▲ ▼ : parágrafo a parágrafo (S ligado: estende até o fim do parágrafo) ---------- */
 function blocosDe(body){ return Array.from(body.querySelectorAll(BLOCOS)).filter(b => !b.querySelector(BLOCOS) && !b.matches('p.dt') && !b.closest('p.dt')); }
-function primeiroPonto(b){ const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); const t = w.nextNode(); return t ? { node:t, off:0 } : { node:b, off:0 }; }
-function ultimoPonto(b){ const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); let t, u = null; while((t = w.nextNode())) u = t; if(!u) return { node:b, off:b.childNodes.length && b.lastChild.nodeName === 'BR' ? b.childNodes.length - 1 : b.childNodes.length }; let o = u.data.length; while(o > 0 && /\s/.test(u.data[o - 1])) o--; return { node:u, off:o }; }
+const SEM_VAO = { acceptNode:n => n.parentElement && n.parentElement.closest('.pgap') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT };
+function primeiroPonto(b){ const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT, SEM_VAO); const t = w.nextNode(); return t ? { node:t, off:0 } : { node:b, off:0 }; }
+function ultimoPonto(b){ const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT, SEM_VAO); let t, u = null; while((t = w.nextNode())) u = t; if(!u) return { node:b, off:b.childNodes.length && b.lastChild.nodeName === 'BR' ? b.childNodes.length - 1 : b.childNodes.length }; let o = u.data.length; while(o > 0 && /\s/.test(u.data[o - 1])) o--; return { node:u, off:o }; }
 function blocoDoPonto(bls, node, off){
   const el = node.nodeType === 1 ? node : node.parentElement;
   const b = el.closest(BLOCOS); if(b && bls.includes(b)) return b;
@@ -4526,7 +4688,7 @@ function folhasTela(){
       const idx = +pg.dataset.i, e = d.pl[idx], k = vivas(d).indexOf(e);
       out.push({ key:d.id + ':' + idx, d, pg, top:0, h:pg.offsetHeight, fl:f.ini + k, e });
     } else if(pg.classList.contains('txt')){
-      const tops = [0].concat(Array.from(pg.querySelectorAll('.brk')).map(b => b.offsetTop));
+      const tops = [0].concat(Array.from(pg.querySelectorAll('.brk')).map(b => brkIni(b)));
       tops.forEach((t, j) => out.push({ key:d.id + '#' + j, d, pg, top:t, h:(tops[j + 1] != null ? tops[j + 1] : pg.offsetHeight) - t, fl:f.ini + j, j }));
     }
   });
@@ -4605,9 +4767,14 @@ function alvos(){
   let atual = null; for(const f of lista){ if(f.pg.offsetTop + f.top <= y) atual = f; }
   return atual ? [atual] : lista.slice(0, 1);
 }
+/* carimbo e numeração: licitação e aditivo saem com o Carimbo Licitação numerado; os demais, carimbo SEINFRA sem número */
+const procReal = p => !!(p && !p.avulsa && !p.avdoc);
+const ehLicAdt = p => !!(p && (p.cat === 'licitacoes' || p.cat === 'aditivos'));
+function carimboAtual(p){ p = p || M.p; if(!procReal(p)) return settings.carimboPdf || 'nenhum'; return p.carimbo || (ehLicAdt(p) ? 'licitacao' : 'seinfra'); }
+function numerarAtual(p){ p = p || M.p; if(!procReal(p)) return !!settings.numerar; return p.numerar != null ? !!p.numerar : ehLicAdt(p); }
 function renderSelBar(){
-  const F = M.fsel, bar = $('selBar'); if(!F) return;
-  const n = F.sel.size, pdfM = F.modo === 'pdf', car = settings.carimboPdf || 'nenhum';
+  const F = M.fsel, bar = $('selBar'); if(!F){ pintarCarimbos(); if(typeof pintarCapsula === 'function') pintarCapsula(); return; }
+  const n = F.sel.size, pdfM = F.modo === 'pdf', car = carimboAtual();
   const tb = (rot, ic, fn, cls) => h('button', { class:'tbtn' + (cls ? ' ' + cls : ''), onclick:fn }, h('i', { html:I[ic] || ic }), rot);
   const icCarimbo = h('img', { src:'data:image/png;base64,' + (car === 'licitacao' ? B64_CARIMBO_LIC : B64_CARIMBO_SEINFRA), alt:'', style:{ width:'24px', opacity:car === 'nenhum' ? '.45' : '1' } }).outerHTML;
   const nomeCar = car === 'seinfra' ? 'Carimbo SEINFRA' : car === 'licitacao' ? 'Carimbo Licitação' : 'Carimbar';
@@ -4622,15 +4789,16 @@ function renderSelBar(){
     kids.push(h('div', { class:'g' },
       tb('Girar', 'rotR', ev => menuGirar(ev.currentTarget)),
       tb(nomeCar, icCarimbo, ev => menuCarimbo(ev.currentTarget), car !== 'nenhum' ? 'on' : ''),
-      tb(settings.numerar ? 'Numeradas' : 'Numerar', 'hash', () => numerarSheet(), settings.numerar ? 'on' : ''),
+      tb(numerarAtual() ? 'Numeradas' : 'Numerar', 'hash', () => numerarSheet(), numerarAtual() ? 'on' : ''),
       tb('Enviar', 'share', ev => enviarMesa(ev.currentTarget), 'pri')));
   } else {
     kids.push(h('div', { class:'l' }, h('b', null, n ? plural(n, 'folha marcada', 'folhas marcadas') : 'Folhas'),
       h('button', { class:'btn sm ghost', onclick:() => { if(n){ F.sel.clear(); F.escopo = 'pagina'; pintarSelecao(); } else marcarFolhas(folhasTela().map(f => f.key), true); } }, n ? 'Nenhuma' : 'Todas'),
       h('button', { class:'hbtn', html:I.x, 'aria-label':'Sair', onclick:() => sairSelecao() })));
     kids.push(h('div', { class:'g' },
+      tb('Girar', 'rotL', () => { const l = selecionadas(); if(!l.length) return toast('Marque as folhas primeiro.'); girarFolhas(l); }),
       tb('Carimbar', icCarimbo, ev => menuCarimbo(ev.currentTarget), car !== 'nenhum' ? 'on' : ''),
-      tb(settings.numerar ? 'Numeradas' : 'Numerar', 'hash', () => numerarSheet(), settings.numerar ? 'on' : ''),
+      tb(numerarAtual() ? 'Numeradas' : 'Numerar', 'hash', () => numerarSheet(), numerarAtual() ? 'on' : ''),
       tb('Ver PDF', 'pdf', () => exportarFolhas(alvos(), 'previa')),
       tb('Enviar', 'share', () => exportarFolhas(alvos(), 'compartilhar'), 'pri')));
   }
@@ -4651,8 +4819,8 @@ function menuGirar(ancora){
   ]);
 }
 function menuCarimbo(ancora){
-  const car = settings.carimboPdf || 'nenhum';
-  const por = k => () => { settings.carimboPdf = k; saveSettings(); renderSelBar(); toast(k === 'nenhum' ? 'Sem carimbo.' : k === 'seinfra' ? 'Carimbo SEINFRA em todas as folhas.' : 'Carimbo Licitação em todas as folhas.', { ms:1500 }); };
+  const car = carimboAtual();
+  const por = k => () => { if(procReal(M.p)){ M.p.carimbo = k; touch(M.p); saveDB(); } else { settings.carimboPdf = k; saveSettings(); } renderSelBar(); toast(k === 'nenhum' ? 'Sem carimbo.' : k === 'seinfra' ? 'Carimbo SEINFRA em todas as folhas.' : 'Carimbo Licitação em todas as folhas.', { ms:1500 }); };
   popMenu(ancora, [
     { t:'Carimbo SEINFRA', sub:'no canto de cima, à direita', on:car === 'seinfra', fn:por('seinfra') },
     { t:'Carimbo Licitação (P.M.I.)', sub:'no canto de cima, à direita', on:car === 'licitacao', fn:por('licitacao') },
@@ -4660,19 +4828,22 @@ function menuCarimbo(ancora){
   ]);
 }
 function numerarSheet(){
-  const p = M.p, liga = h('input', { type:'checkbox', checked:!!settings.numerar });
+  const p = M.p, liga = h('input', { type:'checkbox', checked:numerarAtual(p) });
   const ini = h('input', { class:'inp', type:'number', min:'1', inputmode:'numeric', value:String(parseInt(p.fls0, 10) || 1) });
   sheet({ titulo:'Numerar as folhas', corpo:[
     h('div', { class:'sgGrp' }, h('label', { class:'sgRow' }, h('span', null, 'Numerar'), liga)),
     h('div', { class:'sgGrp', style:{ padding:'10px' } }, h('label', { class:'fld' }, h('span', null, 'Começa na folha nº'), ini)),
     h('p', { class:'sgNota' }, 'Com carimbo, o número vai dentro dele. Sem carimbo, sai "Fls. 12" no canto de cima, à direita.')],
-    botoes:[{ t:'Cancelar', v:'ghost' }, { t:'OK', v:'acc', fn:() => { settings.numerar = liga.checked; saveSettings(); const n = parseInt(ini.value, 10); if(n > 0 && n !== (parseInt(p.fls0, 10) || 1)){ p.fls0 = n; touch(p); saveDB(); } renderMesa(true); renderSelBar(); } }] });
+    botoes:[{ t:'Cancelar', v:'ghost' }, { t:'OK', v:'acc', fn:() => { if(procReal(p)){ p.numerar = liga.checked; touch(p); saveDB(); } else { settings.numerar = liga.checked; saveSettings(); } const n = parseInt(ini.value, 10); if(n > 0 && n !== (parseInt(p.fls0, 10) || 1)){ p.fls0 = n; touch(p); saveDB(); } renderMesa(true); renderSelBar(); } }] });
 }
 function enviarMesa(ancora){
   const l = folhasTela(); if(!l.length) return toast('Inclua um PDF ou uma foto primeiro.');
+  const mk = temMarcasPdf(l);
   popMenu(ancora, [
-    { t:'Salvar ou compartilhar o PDF', sub:plural(l.length, 'folha', 'folhas') + ', do jeito que está na tela', ic:'share', fn:() => exportarFolhas(folhasTela(), 'compartilhar') },
-    { t:'Ver o PDF antes', ic:'eye', fn:() => exportarFolhas(folhasTela(), 'previa') },
+    { t:'Salvar ou compartilhar o PDF', sub:plural(l.length, 'folha', 'folhas') + (mk ? ', sem as marcações' : ', do jeito que está na tela'), ic:'share', fn:() => exportarFolhas(folhasTela(), 'compartilhar') },
+    mk ? { t:'Com as marcações', sub:'o marca-texto sai no arquivo', ic:'highlighter', fn:() => exportarFolhas(folhasTela(), 'compartilhar', { marcas:true }) } : null,
+    { t:'Ver o PDF antes', ic:'eye', fn:() => exportarFolhas(folhasTela(), 'previa', mk ? { marcas:true } : null) },
+    { t:'Dividir para enviar', sub:'partes que cabem no limite', ic:'dividir', fn:() => dividirSheet() },
     '-',
     { t:'Esvaziar a mesa', sub:'para começar outro arquivo', ic:'trash', danger:true, fn:() => esvaziarMesa() }
   ]);
@@ -4687,8 +4858,8 @@ async function esvaziarMesa(){
 /* o carimbo e o número aparecem na tela, do jeito que vão sair no PDF */
 function pintarCarimbos(){
   pagesEl.querySelectorAll('.carV').forEach(x => x.remove());
-  if(!M.p || !M.fsel) return;
-  const car = settings.carimboPdf || 'nenhum', num = !!settings.numerar;
+  if(!M.p || !(M.fsel || M.p.avulsa)) return;
+  const car = carimboAtual(), num = numerarAtual();
   if(car === 'nenhum' && !num) return;
   const src = car === 'nenhum' ? null : 'data:image/png;base64,' + (car === 'licitacao' ? B64_CARIMBO_LIC : B64_CARIMBO_SEINFRA);
   folhasTela().forEach(f => {
@@ -4767,8 +4938,8 @@ async function juntarEmArquivo(l){
     depoisDeMudar('Arquivo juntado: ' + d.nome + '.');
   }catch(e){ b.end(); console.error(e); toast('Não foi possível juntar: ' + (e.message || e)); }
 }
-async function pdfIncluirEmProcesso(){
-  const l = alvos(); if(!l.length) return;
+async function pdfIncluirEmProcesso(lista){
+  const l = lista || alvos(); if(!l.length) return;
   const ps = procsReais().filter(q => q !== M.p).sort((a, b) => b.updated - a.updated);
   if(!ps.length) return toast('Ainda não há processo para receber. Crie um em Novo processo.');
   const id = await optSheet('Incluir em qual processo?', [{ itens:ps.map(q => ({ v:q.id, t:q.ficha.objeto || tituloProc(q), sub:q.ficha.num || '' })) }], null);
@@ -4808,11 +4979,12 @@ async function pdfDasFolhas(lista, opt){
       i++;
     }
   }
+  if(opt.marcas || PDF_MARCAS) desenharMarcas(out, lista.map((f, i) => [i, f.e]));
   if((opt.carimbo && opt.carimbo !== 'nenhum') || opt.numerar) carimbar(out, R, { carimbo:opt.carimbo || 'nenhum', numerar:opt.numerar, numeros:lista.map(f => f.fl), deitada:settings.deitada });
   out.setTitle(opt.titulo || ''); out.setCreator('Panda'); out.setProducer('Panda');
   return out.save();
 }
-function optCarimbo(){ return { carimbo:settings.carimboPdf || 'nenhum', numerar:!!settings.numerar }; }
+function optCarimbo(){ return { carimbo:carimboAtual(), numerar:numerarAtual() }; }
 function exportarSheet(ancora){
   const l = alvos(); if(!l.length) return;
   menu('Exportar ' + plural(l.length, 'folha', 'folhas'), [
@@ -4821,14 +4993,15 @@ function exportarSheet(ancora){
     { t:'Ver o PDF', ic:'eye', fn:() => exportarFolhas(l, 'previa') },
   ], ancora);
 }
-async function exportarFolhas(l, como){
+async function exportarFolhas(l, como, extra){
   if(!l || !l.length) return;
   if(!precisaLibs()) return;
-  const b = busy('Montando o PDF…');
+  const b = busy(l.length > 40 ? 'Montando o PDF (' + l.length + ' folhas)… aguarde' : 'Montando o PDF…');
   try{
-    const o = optCarimbo();
+    const o = Object.assign(optCarimbo(), extra || {});
     const bytes = await pdfDasFolhas(l, Object.assign({ titulo:tituloProc(M.p) }, o));
     b.end();
+    if(como !== 'imprimir') avisoGrande(bytes, l);
     const docs = Array.from(new Set(l.map(f => f.d)));
     const nome = safeName((docs.length === 1 ? docs[0].nome : (M.p.avulsa ? 'Documentos' : tituloProc(M.p))) + (l.length < folhasTela().length && docs.length > 1 ? ' (fls. ' + faixaTexto(l.map(f => f.fl)) + ')' : ''), '.pdf');
     if(como === 'imprimir') return imprimirBytes(bytes, nome);
@@ -4869,7 +5042,7 @@ function menuPdfPagina(){
     { t:e.b ? 'Tirar o brasão desta página' : 'Brasão nesta página', ic:'pdf', fn:mud(() => { e.b = !e.b; }) },
     { t:'Retirar esta página', ic:'trash', fn:() => { e.d = true; depoisDeMudar(); toast('Página retirada.', { acao:'Desfazer', fn:() => { e.d = false; depoisDeMudar(); } }); } },
     '-',
-    { t:'Selecionar folhas', sub:'Juntar, separar, carimbar, exportar', ic:'selpg', fn:() => entrarSelecao(false, M.p.avulsa ? 'pdf' : 'folhas') }
+    { t:'Selecionar folhas', sub:'Juntar, separar, carimbar, exportar', ic:'selpg', fn:() => entrarSelecao(false, 'folhas') }
   ]);
 }
 for(const [id, fn] of [['bSig', () => { const d = M.cur && M.cur.d; if(d && d.kind === 'texto') sigSheet(d); }], ['bNovo', () => novoDocumento({})], ['bPdf', menuPdfPagina]]){
@@ -4888,7 +5061,10 @@ $('aSig').onclick = () => { fecharTeclado(); const d = M.cur && M.cur.d; if(d &&
 $('aMais').onclick = () => { fecharTeclado(); menuTopo($('aMais')); };
 $('aBot').addEventListener('click', ev => {
   const b = ev.target.closest('button[data-a]'); if(!b || M.editing) return;
-  if(b.dataset.a === 'selecionar' && !M.selMode) return menuS(b);
+  if(b.dataset.a === 'selecionar') return abrirBolhasS(b);
+  if(b.dataset.a === 'expandir') return capsula(!CAP.aberta);
+  if(b.dataset.a === 'pginteira') return pgInteira(false);
+  if(['esq', 'dir', 'cima', 'baixo'].includes(b.dataset.a) && navFolha(b.dataset.a)) return;
   if(b.dataset.a !== 'ferramentas') fecharTeclado();
   acao(b.dataset.a);
 });
@@ -4912,9 +5088,12 @@ function menuTopo(ancora){
     p.avulsa ? null : { t:'Novo documento', ic:'docplus', fn:() => novoDocumento({}) },
     txt ? { t:'Nova página', ic:'blank', fn:() => novaPaginaNaMesa() } : null,
     { t:'Incluir PDF', ic:'clip', fn:() => incluirPdfNaMesa() },
+    p.avulsa ? { t:'Fotografar', ic:'camera', fn:() => fotografar() } : null,
+    p.avulsa ? { t:'Texto pronto', sub:'vira folha de PDF na mesa', ic:'paste', fn:() => textoPronto({}) } : null,
     '-',
     txt ? { t:'Revisar o texto', ic:'sparkle', fn:() => revisarTudo(d) } : null,
-    { t:'Selecionar folhas', ic:'selpg', fn:() => entrarSelecao(false, p.avulsa ? 'pdf' : 'folhas') },
+    { t:'Selecionar folhas', ic:'selpg', fn:() => entrarSelecao(false, 'folhas') },
+    txt ? { t:'Ferramentas de texto', sub:'formatar, tabela, letra maior, teclado', ic:'textsize', fn:() => setTimeout(() => menuFerramentas($('aMais')), 40) } : null,
     { k:'rolar', t:ROL.on ? 'Parar a rolagem' : 'Rolar sozinho', ic:'chevD', on:ROL.on, fn:() => acao('rolar') },
     { t:'Buscar no texto', ic:'search', fn:() => buscarNoProcesso() },
     '-',
@@ -4929,9 +5108,7 @@ function menuFerramentas(ancora){
     { t:'Copiar', ic:'copy', fn:() => acao('copiar') },
     { t:'Colar', ic:'paste', fn:() => acao('colar') },
     '-',
-    { t:'Selecionar palavra', fn:() => acao('palavra') },
-    { t:'Selecionar parágrafo', fn:() => acao('paragrafo') },
-    { t:'Selecionar tudo', fn:() => acao('tudo') },
+    { t:'Próximo campo', sub:'o próximo [campo] a preencher', ic:'campo', fn:() => acao('campo') },
     '-',
     { t:'Marca-texto', ic:'highlighter', fn:() => acao('marca') },
     { t:'Formatar (negrito, lista…)', ic:'textsize', fn:() => acao('formatar') },
@@ -4961,7 +5138,7 @@ function sigSheet(d){
     const data = h('input', { type:'date', value:st.data, onchange:e => { st.data = e.target.value || hojeISO(); pinta(); } });
     const sw = h('label', { class:'sw' }, h('input', { type:'checkbox', checked:st.revit && temRevit, disabled:!temRevit, 'aria-label':'Usar o REVIT', onchange:e => { st.revit = e.target.checked; pinta(); } }), h('i'));
     grp.replaceChildren(
-      val('Signatário', b => popMenu(b, settings.signatarios.map(x => ({ t:titleCase(x.nome), sub:x.cargo, on:st.pessoa === x.id, fn:() => { st.pessoa = x.id; pinta(); } })).concat(['-', { t:'Sem assinatura', sub:'anexo, planilha', on:st.pessoa === '__sem', fn:() => { st.pessoa = '__sem'; pinta(); } }])),
+      val('Signatário', b => menuSignatario(b, st.pessoa, id => { st.pessoa = id; pinta(); }, { sem:true }),
         st.pessoa === '__sem' ? 'Sem assinatura' : pes ? titleCase(pes.nome) : 'Escolher'),
       h('div', { class:'sgRow' }, h('span', null, 'Data'), data),
       val('Assinatura', b => popMenu(b, [['eletronica', 'Eletrônica'], ['fisica', 'Física (caneta)']].map(([k, t]) => ({ t, on:st.modo === k, fn:() => { st.modo = k; pinta(); } }))), st.modo === 'fisica' ? 'Física' : 'Eletrônica'),
@@ -5008,7 +5185,7 @@ function todosSigSheet(){
 const REV_TUDO = 'Você é revisor de documentos oficiais da Secretaria Municipal de Infraestrutura e Defesa Civil de Ilhéus (Bahia). Revise os parágrafos numerados abaixo: ortografia, acentuação, concordância, regência, crase, pontuação e clareza, em português do Brasil formal e impessoal. Não mude o sentido, os números, as datas, os nomes, os valores nem os marcadores entre colchetes como [^1]. Nunca use a palavra "tratativa(s)". Responda SOMENTE com os parágrafos que precisam de alguma mudança, cada um numa linha no formato [n] texto revisado completo. Se nada precisar mudar, responda apenas: SEM MUDANÇAS.';
 function textoParaRevisao(b){
   const partes = [], map = [];
-  const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode:n => n.nodeType === 1 ? (n.matches('sup.nr') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP) : n.parentElement.closest('sup.nr') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode:n => n.nodeType === 1 ? (n.matches('sup.nr') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP) : n.parentElement.closest('sup.nr,.pgap') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
   let n, k = 0;
   while((n = w.nextNode())){
     if(n.nodeType === 1){ k++; const t = '[^' + k + ']'; for(let i = 0; i < t.length; i++) map.push(null); partes.push(t); continue; }
@@ -5254,6 +5431,7 @@ function caminhoAtual(){
 function entrarEdicaoTela(){
   while(SHEETS.length) SHEETS[SHEETS.length - 1].fechar();
   arvore();
+  layHistIniciar();
   LAY.editando = true; LAY.k = 0.8; LAY.inserir = null; LAY.colocar = null; document.body.classList.add('layEdit');
   if(VIEW === 'mesa' && M.fsel) sairSelecao(true);
   if(VIEW === 'mesa') fecharTeclado();
@@ -5283,6 +5461,7 @@ function renderLayBar(){
     bt('eye', LAY.mapa ? 'Ver a tela' : nomeTela(telaAtual()), () => { if(LAY.mapa) abrirTelaDe(LAY.sel[LAY.sel.length - 1] || RAIZ); }, LAY.mapa ? '' : 'on'),
     bt('docplus', 'Página', () => novaPaginaSheet({})),
     bt('note', 'Lista', listaLayout),
+    bt('undo', 'Desfazer', desfazerLayout),
     bt('check', 'Pronto', sairEdicaoTela, 'ok'));
 }
 function abrirMapa(){
@@ -5839,18 +6018,37 @@ function renderProcTela(){
     h('button', { class:'aBola', 'data-lay':'procMais', 'aria-label':'Mais', html:I.plusBold, onclick:ev => menuProcTela(p, ev.currentTarget) }), () => fichaSheet(p));
   const corpo = h('div', { class:'wrap' });
   const grp = h('div', { class:'aGrp dList' });
-  linha.forEach(d => {
+  /* anexos ficam escondidos: o retângulo com o clipe mostra ou esconde os de cada documento */
+  const A = anexosAbertos(), docAb = emSplit(p) ? p.docs.find(x => x.id === M.docAberto) : null;
+  if(docAb && docAb.pai) A[docAb.pai] = true;
+  const linhaDoc = d => {
     const f = F[d.id], an = ehAnexoEm(p, d);
     const tipo = d.kind === 'pdf' ? 'PDF' : (TIPO_NOME[d.tipo] || 'Texto');
     const fl = f ? (f.k === 0 ? 'sem páginas' : f.k > 1 ? 'fls. ' + f.ini + '–' + f.fim : 'fl. ' + f.ini) : '';
     const main = h('button', { class:'dMain', onclick:() => tocarDoc(p, d) },
       h('span', { class:'dN' }, N[d.id] ? N[d.id].n : ''),
       h('span', { class:'tx' }, h('b', null, d.nome), h('span', null, [tipo, fl].filter(Boolean).join(' · '))));
-    const maisAnexo = h('button', { class:'dMaisA', 'aria-label':'Anexar arquivo a este documento', html:I.plus, onclick:ev => { ev.stopPropagation(); incluirNoProc(p, an ? (p.docs.find(x => x.id === d.pai) || d) : d); } });
-    const row = h('div', { class:'dRow' + (an ? ' anexo' : '') + (emSplit(p) && M.docAberto === d.id ? ' aberto' : ''), dataset:{ id:d.id } }, main, maisAnexo, h('span', { class:'dGrip', role:'button', 'aria-label':'Segure e arraste para mudar a ordem', html:I.menu }));
+    const filhos = an ? [] : p.docs.filter(x => x.pai === d.id && (x.linha || x.kind === 'vaga'));
+    const cheios = filhos.filter(x => x.kind !== 'vaga').length;
+    const chip = filhos.length ? h('button', { class:'dAnx' + (A[d.id] ? ' on' : '') + (cheios < filhos.length ? ' falta' : ''), 'aria-label':(A[d.id] ? 'Esconder' : 'Mostrar') + ' os anexos', onclick:ev => { ev.stopPropagation(); alternarAnexos(p, d); } },
+      h('i', { html:I.clip }), cheios < filhos.length ? cheios + '/' + filhos.length : String(cheios)) : null;
+    const maisAnexo = h('button', { class:'dMaisA', 'aria-label':'Anexar arquivo a este documento', html:I.plus, onclick:ev => { ev.stopPropagation(); anexosAbertos()[an ? d.pai : d.id] = true; incluirNoProc(p, an ? (p.docs.find(x => x.id === d.pai) || d) : d); } });
+    const row = h('div', { class:'dRow' + (an ? ' anexo' : '') + (d.tipo === 'capa' ? ' capa' : '') + (emSplit(p) && M.docAberto === d.id ? ' aberto' : ''), dataset:{ id:d.id } }, main, chip, maisAnexo, h('span', { class:'dGrip', role:'button', 'aria-label':'Segure e arraste para mudar a ordem', html:I.menu }));
     toqueLongo(main, () => menuDocTela(p, d, main));
     ligarArrastoDoc(row, p, d);
-    grp.append(row);
+    return row;
+  };
+  const linhaVaga = v => {
+    const main = h('button', { class:'dMain', onclick:() => preencherVaga(p, v) },
+      h('span', { class:'dN', html:I.plus }),
+      h('span', { class:'tx' }, h('b', null, v.nome), h('span', null, 'toque para anexar o PDF')));
+    const row = h('div', { class:'dRow anexo vaga', dataset:{ id:v.id } }, main);
+    toqueLongo(main, () => menuVaga(p, v, main));
+    return row;
+  };
+  linha.filter(d => !ehAnexoEm(p, d)).forEach(d => {
+    grp.append(linhaDoc(d));
+    if(A[d.id]) p.docs.filter(x => x.pai === d.id && (x.linha || x.kind === 'vaga')).forEach(x => grp.append(x.kind === 'vaga' ? linhaVaga(x) : linhaDoc(x)));
   });
   if(!linha.length) grp.append(h('div', { class:'aVazio' }, 'Nenhum documento ainda.'));
   corpo.append(h('div', { class:'aSec' }, h('span', null, 'Documentos'), linha.length > 1 ? h('span', { class:'dDica' }, 'arraste ≡ para mudar a ordem') : null), grp,
@@ -5862,6 +6060,7 @@ function renderProcTela(){
   v.replaceChildren(topo, h('div', { class:'scroll' }, corpo), pandaPg());
   aplicarLayUI();
   ajustarSplit();
+  if(VIEW === 'proc' && typeof recontarLista === 'function') recontarLista(p);
   const ab = v.querySelector('.dRow.aberto'); if(ab) ab.scrollIntoView({ block:'nearest' });
 }
 /* documento aberto embaixo, lista em cima; tocar no rótulo do aberto fecha */
@@ -5897,7 +6096,13 @@ function menuProcTela(p, ancora){
   popMenu(ancora, [
     { t:'Novo documento', ic:'docplus', fn:() => novoDocumento({ p }) },
     { t:'Incluir anexo (PDF, foto, ZIP)', ic:'clip', fn:() => incluirNoProc(p, null) },
+    { t:'Colar o inteiro teor', sub:'cada documento entra no lugar certo', ic:'paste', fn:() => textoPronto({ p, teor:true }) },
+    SEQ[p.cat] ? { t:'Montar a sequência padrão', sub:p.cat === 'aditivos' ? 'documentos do aditivo, capas e anexos' : 'documentos da licitação, capas e anexos', ic:'layers', fn:async () => {
+      if(temEsqueleto(p) && !await confirmar('Sequência padrão', 'Este processo já tem a sequência. Montar de novo acrescenta outra no fim.', 'Montar', false)) return;
+      montarSequencia(p); renderProcTela(); toast('Sequência montada.'); } } : null,
     '-',
+    { t:'Inteiro teor em PDF', sub:'o processo inteiro num PDF só', ic:'pdf', fn:() => inteiroTeorPdf(p) },
+    ehLicAdt(p) ? { t:'Módulo pré-minuta', sub:'do 1º documento até o despacho pré-minuta', ic:'pdf', fn:() => preMinutaPdf(p) } : null,
     { t:'Ficha central', ic:'pen', fn:() => fichaSheet(p) },
     { t:'Relatório e prontuário', ic:'report', fn:() => abrirRel(p) },
     { t:'Registrar tramitação', ic:'route', fn:() => tramSheet(p) },
@@ -5929,7 +6134,8 @@ function menuDocTela(p, d, ancora){
   menu(d.nome, [
     { t:'Abrir', ic:'doc', fn:() => abrirMesa(p, { doc:d.id }) },
     { t:'Renomear', ic:'pen', fn:async () => { const n = await perguntar('Renomear', 'Nome do documento', d.nome); if(n){ d.nome = n; re(); } } },
-    ehAnexoEm(p, d) ? null : { t:'Anexar arquivo a este documento', sub:'Entra como ' + ((numeracaoLinha(p)[d.id] || {}).n || '') + '.1, .2…', ic:'clip', fn:() => incluirNoProc(p, d) },
+    ehAnexoEm(p, d) ? null : { t:'Anexar arquivo a este documento', sub:'Entra como ' + ((numeracaoLinha(p)[d.id] || {}).n || '') + '.1, .2…', ic:'clip', fn:() => { anexosAbertos()[d.id] = true; incluirNoProc(p, d); } },
+    ehAnexoEm(p, d) ? null : { t:'Nova caixinha de anexo', sub:'fica esperando o PDF', ic:'plus', fn:() => novaCaixinha(p, d) },
     d.pai ? { t:'Deixar de ser anexo', ic:'layers', fn:() => { d.pai = null; ordenarAnexos(p); re(); } }
       : { t:'Tornar anexo de outro documento', ic:'clip', fn:async () => { const ops = p.docs.filter(x => x.linha && x !== d && !x.pai).map(x => [x.id, x.nome]); if(!ops.length) return toast('Não há outro documento.'); const id = await escolher('Anexo de qual documento?', ops, null); if(!id) return; p.docs.filter(x => x.pai === d.id).forEach(x => x.pai = id); d.pai = id; ordenarAnexos(p); re(); } },
     { t:'Prévia do PDF', ic:'eye', fn:() => previaDoc(d, p) },
@@ -5937,7 +6143,8 @@ function menuDocTela(p, d, ancora){
     '-',
     { t:'Excluir documento', ic:'trash', danger:true, fn:async () => {
       if(!await confirmar('Excluir documento', '“' + d.nome + '” será apagado deste processo.', 'Excluir', true)) return;
-      p.docs = p.docs.filter(x => x !== d); p.docs.forEach(x => { if(x.pai === d.id) x.pai = null; });
+      voltarVaga(p, d);
+      p.docs = p.docs.filter(x => x !== d && !(x.kind === 'vaga' && x.pai === d.id)); p.docs.forEach(x => { if(x.pai === d.id) x.pai = null; });
       if(d.kind === 'pdf' && !DB.procs.some(q => q.docs.some(x => x.fileId === d.fileId))) await apagarBytes(d.fileId);
       if(emSplit(p) && M.docAberto === d.id){ largarMesa(); mostrar('proc'); }
       touch(p); saveDB(true); renderProcTela(); if(emSplit(p)) renderMesa(true); toast('Documento excluído.'); } }
@@ -5978,6 +6185,2348 @@ function ligarArrastoDoc(row, p, d){
     if(a.alvo !== a.i0){ if(emSplit(p)) salvarTudo(); reordenarDoc(p, d, a.alvo); touch(p); saveDB(); renderProcTela(); if(emSplit(p)) renderMesa(true); toast('Ordem mudada. As folhas foram renumeradas.', { ms:1600 }); }
   };
   grip.addEventListener('pointerup', fim); grip.addEventListener('pointercancel', fim);
+}
+
+/* ===== m_seq.js ===== */
+/* =====================================================================
+   Sequências padrão (licitação e aditivo), folhas-marcador (capas),
+   caixinhas de anexo e o inteiro teor colado de uma vez
+   ===================================================================== */
+
+/* ---------- secretarias demandantes: cada uma tem a sua autoridade ---------- */
+const SECRETARIAS_PADRAO = () => [
+  { id:'seinfra', nome:'Secretaria Municipal de Infraestrutura e Defesa Civil', curto:'SEINFRA' },
+  { id:'educacao', nome:'Secretaria Municipal de Educação', curto:'Educação' },
+  { id:'saude', nome:'Secretaria Municipal de Saúde', curto:'Saúde' }
+];
+const secretarias = () => Array.isArray(settings.secretarias) && settings.secretarias.length ? settings.secretarias : SECRETARIAS_PADRAO();
+const secretariaPorId = id => secretarias().find(s => s.id === id) || null;
+const secretariaDoProc = p => secretariaPorId(p && p.ficha && p.ficha.secretaria) || secretariaPorId('seinfra') || secretarias()[0];
+const autoridadeDaSec = id => (settings.signatarios || []).find(s => s.sec === id) || null;
+function autoridadeDe(p){ const s = secretariaDoProc(p); return (s && autoridadeDaSec(s.id)) || autoridade(); }
+
+/* signatário por apelido: autoridade (SEINFRA), demandante (da ficha), superintendente, nenhum, ou o nome */
+function pessoaDoRef(ref, p){
+  const r = norm(ref).trim();
+  if(!r) return undefined;
+  if(r === 'nenhum' || r === 'sem') return '__sem';
+  if(r === 'autoridade' || r === 'secretario') return (autoridade() || {}).id || null;
+  if(r === 'demandante') return (autoridadeDe(p) || {}).id || null;
+  if(r === 'superintendente') return pessoaPorId('s2') ? 's2' : null;
+  if(pessoaPorId(ref)) return ref;
+  const achou = (settings.signatarios || []).find(s => norm(s.nome) === r) || (settings.signatarios || []).find(s => norm(s.nome).startsWith(r));
+  return achou ? achou.id : null;
+}
+
+/* ---------- signatários da SEINFRA e das secretarias (versão 2) ---------- */
+const SIG_V = 2;
+function migrarSignatarios(){
+  if((settings.sigV || 0) >= SIG_V) return false;
+  const L = settings.signatarios = Array.isArray(settings.signatarios) ? settings.signatarios : [];
+  for(const x of SETTINGS_PADRAO().signatarios){
+    const ja = L.find(s => norm(s.nome) === norm(x.nome));
+    if(ja){ ['reg', 'sec'].forEach(k => { if(x[k] && !ja[k]) ja[k] = x[k]; }); continue; }
+    L.push(Object.assign({}, x, { id:L.some(s => s.id === x.id) ? uid() : x.id }));
+  }
+  const g = L.find(s => s.autoridade); if(g && !g.sec && !L.some(s => s.sec === 'seinfra')) g.sec = 'seinfra';
+  ordenarSignatarios();
+  if(!Array.isArray(settings.secretarias) || !settings.secretarias.length) settings.secretarias = SECRETARIAS_PADRAO();
+  settings.sigV = SIG_V;
+  return true;
+}
+function ordenarSignatarios(){ (settings.signatarios || []).sort((a, b) => norm(a.nome).localeCompare(norm(b.nome), 'pt-BR')); }
+
+/* ---------- a sequência de cada tipo de processo ---------- */
+const SEQ = {
+  licitacoes: [
+    { slot:'capa', capa:'CAPA', nome:'Capa', anexos:['Capa em PDF'] },
+    { slot:'desp-ini', tipo:'desp', nome:'Despacho inicial', sig:'demandante', dica:'Despacho inicial da secretaria demandante. Se o pedido nasceu na SEINFRA, apague este documento.' },
+    { slot:'dfd', tipo:'dfd', nome:'DFD', sig:'superintendente', anexos:['Planilha orçamentária preliminar sintética (POPS)', 'Outros documentos'] },
+    { slot:'desp-dfd', tipo:'desp', nome:'Despacho: acolhe o DFD', sig:'autoridade', dica:'Recepciona e acolhe o DFD; designa o signatário do DFD como responsável pela elaboração do ETP; submete os autos à contabilidade para confirmação da disponibilidade orçamentária e, ato contínuo, determina a remessa à Secretaria Municipal de Infraestrutura e Defesa Civil de Ilhéus.' },
+    { slot:'contabil', capa:'PARECER CONTÁBIL', nome:'Parecer contábil' },
+    { slot:'etp', tipo:'etp', nome:'ETP', sig:'superintendente', anexos:['Matriz de riscos preliminar', 'Planilha orçamentária analítica'] },
+    { slot:'pbtr', tipo:'pb', nome:'Projeto básico / Termo de referência', sig:'superintendente', anexos:['Planilha orçamentária consolidada', 'Memorial descritivo e especificações técnicas', 'Projetos técnicos', 'ART – Anotação de Responsabilidade Técnica', 'Critério de qualificação técnica', 'Matriz de riscos'] },
+    { slot:'desp-etp', tipo:'desp', nome:'Despacho: acolhe o ETP e o PB/TR', sig:'autoridade', dica:'Acolhe o ETP e o Projeto básico/Termo de referência; confirma a disponibilidade orçamentária conforme Parecer Contábil acostado aos autos; encaminha à Diretoria do Núcleo de Licitações e Contratos da Secretaria de Gestão para elaboração da minuta.' },
+    { slot:'minuta', capa:'MINUTA', nome:'Minuta' },
+    { slot:'juridico', capa:'PARECER JURÍDICO', nome:'Parecer jurídico' },
+    { slot:'nt-sup', tipo:'nt', nome:'Nota técnica suplementar', sig:'superintendente', anexos:['DFD definitivo', 'ETP definitivo', 'Projeto básico definitivo', 'Termo de referência definitivo'] },
+    { slot:'aviso', capa:'AVISO DE PUBLICAÇÃO DA LICITAÇÃO', nome:'Aviso de publicação da licitação' },
+    { slot:'edital', capa:'EDITAL DE LICITAÇÃO', nome:'Edital de licitação' },
+    { slot:'nt-prop', tipo:'nt', nome:'Nota técnica de análise de proposta', sig:'superintendente' }
+  ],
+  aditivos: [
+    { slot:'capa', capa:'CAPA', nome:'Capa', anexos:['Capa em PDF'] },
+    { slot:'sol', tipo:'sol', nome:'Solicitação de demanda', sig:'superintendente' },
+    { slot:'nt', tipo:'nt', nome:'Nota técnica', sig:'superintendente', anexos:['Planilha do aditivo'] },
+    { slot:'decl', tipo:'decl', nome:'Pesquisa de preço (declaração de vantajosidade)', sig:'superintendente', anexos:['Planilha de pesquisa de preço'] },
+    { slot:'contratuais', capa:'DOCUMENTOS CONTRATUAIS', nome:'Documentos contratuais', anexos:['Documentos contratuais'] },
+    { slot:'contratada', capa:'DOCUMENTOS DA CONTRATADA', nome:'Documentos da contratada', anexos:['Documentos da contratada'] },
+    { slot:'desp-aut', tipo:'desp', nome:'Despacho: acolhe a nota técnica', sig:'autoridade', dica:'Acolhe a nota técnica e encaminha à Secretaria de Gestão para elaboração da minuta do termo aditivo, com posterior encaminhamento para parecer contábil e parecer jurídico.' },
+    { slot:'minuta', capa:'MINUTA', nome:'Minuta', anexos:['Minuta do termo aditivo'] },
+    { slot:'contabil', capa:'PARECER CONTÁBIL', nome:'Parecer contábil' },
+    { slot:'juridico', capa:'PARECER JURÍDICO', nome:'Parecer jurídico' }
+  ]
+};
+/* anexos de fábrica quando o documento entra fora da sequência */
+const ANEXOS_TIPO = {
+  dfd:['Planilha orçamentária preliminar sintética (POPS)', 'Outros documentos'],
+  etp:['Matriz de riscos preliminar', 'Planilha orçamentária analítica'],
+  pb:['Planilha orçamentária consolidada', 'Memorial descritivo e especificações técnicas', 'Projetos técnicos', 'ART – Anotação de Responsabilidade Técnica', 'Critério de qualificação técnica', 'Matriz de riscos'],
+  decl:['Planilha de pesquisa de preço']
+};
+ANEXOS_TIPO.tr = ANEXOS_TIPO.pb;
+const TITULO_TIPO = { desp:'DESPACHO', dfd:'DOCUMENTO DE FORMALIZAÇÃO DE DEMANDA', etp:'ESTUDO TÉCNICO PRELIMINAR', pb:'PROJETO BÁSICO', tr:'TERMO DE REFERÊNCIA', nt:'NOTA TÉCNICA', sol:'SOLICITAÇÃO DE DEMANDA', decl:'DECLARAÇÃO DE VANTAJOSIDADE' };
+const PCA_NAO_CONSTA = 'Foi verificado que a presente contratação não consta da versão atual do Plano de Contratações Anual (PCA), de modo que se solicita ao Setor de Contabilidade a análise da disponibilidade orçamentária.';
+
+/* ---------- folha-marcador (capa): brasão e só o título no meio da folha ---------- */
+const htmlCapa = t => '<h1 class="capa">' + esc(String(t || '').toLocaleUpperCase('pt-BR')) + '</h1>';
+function novaCapa(titulo, nome, extra){
+  return Object.assign({ id:uid(), kind:'texto', nome:nome || nomeBonito(titulo), tipo:'capa', modelo:'capa', sig:novoSig(null, { sem:true }), html:htmlCapa(titulo),
+    bras:'todas', linha:true, repo:false, criado:Date.now(), mpi:true }, extra || {});
+}
+/* caixinha de anexo vazia: não ocupa folha; tocar nela anexa o PDF no lugar dela */
+const novaVaga = (pai, nome) => ({ id:uid(), kind:'vaga', nome, pai:pai.id, linha:false, repo:false, criado:Date.now() });
+
+/* texto de partida de cada documento da sequência */
+function esqueletoTexto(it){
+  const t = TITULO_TIPO[it.tipo] || String(it.nome || '').toLocaleUpperCase('pt-BR');
+  const L = ['# ' + t, '= PROCESSO ADMINISTRATIVO Nº {{processo}}'];
+  if(it.tipo === 'dfd'){ L.push('[Cole o texto do DFD ou escreva aqui.]', '## Plano de Contratações Anual', '{{pca}}'); }
+  else L.push('[' + (it.dica || 'Cole o texto ou escreva aqui.') + ']');
+  return L.join('\n');
+}
+/* texto puro sem os dados da ficha: serve para saber se o documento ainda está como nasceu */
+function textoBase(html){
+  const b = document.createElement('div'); b.innerHTML = html || '';
+  b.querySelectorAll('.fc').forEach(x => x.remove());
+  return b.textContent.replace(/\s+/g, ' ').trim();
+}
+const estaVazio = d => !!(d.slot && d.base != null && textoBase(d.html) === d.base);
+
+function docDoItem(p, it){
+  if(it.capa) return novaCapa(it.capa, it.nome, { slot:it.slot, slotTipo:'capa' });
+  const pes = pessoaDoRef(it.sig, p);
+  const html = tplParaHTML(esqueletoTexto(it), p);
+  return { id:uid(), kind:'texto', nome:it.nome, tipo:it.tipo, modelo:'livre', sig:novoSig(pes && pes !== '__sem' ? pes : null), html,
+    bras:settings.brasTexto || 'todas', linha:true, repo:false, criado:Date.now(), mpi:true, slot:it.slot, slotTipo:it.tipo, base:textoBase(html) };
+}
+function montarSequencia(p, cat){
+  const seq = SEQ[cat || p.cat]; if(!seq) return 0;
+  for(const it of seq){
+    const d = docDoItem(p, it); p.docs.push(d);
+    (it.anexos || []).forEach(a => p.docs.push(novaVaga(d, a)));
+  }
+  ordenarAnexos(p); touch(p); saveDB(true);
+  return seq.length;
+}
+const temEsqueleto = p => !!(p && p.docs.some(d => d.slot));
+
+/* ---------- inteiro teor: separar os documentos de um texto colado ---------- */
+const TITULOS_DOC = [
+  [/^despacho/, 'desp'], [/^(documento de formalizacao|dfd\b)/, 'dfd'], [/^(estudo tecnico preliminar|etp\b)/, 'etp'],
+  [/^projeto basico/, 'pb'], [/^termo de referencia/, 'tr'], [/^nota tecnica/, 'nt'], [/^comunicacao interna/, 'ci'], [/^oficio\b/, 'of'],
+  [/^solicitacao de demanda/, 'sol'], [/^(declaracao de vantajosidade|pesquisa de preco)/, 'decl'], [/^portaria/, 'livre'],
+  [/^(capa\b|parecer contabil|parecer juridico|minuta\b|aviso de (publicacao|licitacao)|edital\b|documentos contratuais|documentos da contratada|anexo\b)/, 'capa']
+];
+function tipoDoTitulo(t){
+  const n = norm(String(t || '').replace(/^#\s+/, '').replace(/\*\*/g, '')).replace(/\s+/g, ' ').trim();
+  for(const [rx, tp] of TITULOS_DOC) if(rx.test(n)) return tp;
+  return null;
+}
+const CAPA_CHAVES = ['capa', 'contabil', 'juridico', 'minuta', 'aviso', 'edital', 'contratuais', 'contratada'];
+const capaChave = t => { const n = norm(t); return CAPA_CHAVES.find(k => n.includes(k)) || n.trim(); };
+function ehLinhaTitulo(l){
+  const t = l.trim();
+  if(!t || t.startsWith('## ') || t.length > 140) return false;
+  if(t.startsWith('# ')) return true;
+  const letras = t.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  return letras.length >= 3 && t === t.toLocaleUpperCase('pt-BR');
+}
+const SIGLAS = ['DFD', 'ETP', 'TR', 'PB', 'NT', 'POPS', 'SEINFRA', 'ART', 'PCA', 'CI', 'PMI', 'P.M.I.'];
+function nomeBonito(s){
+  s = String(s || '').replace(/^#\s+/, '').replace(/\*\*/g, '').trim();
+  if(!s) return 'Documento';
+  if(s !== s.toLocaleUpperCase('pt-BR')) return s;
+  const baixo = s.toLocaleLowerCase('pt-BR');
+  return baixo.split(' ').map((w, i) => { const up = w.toLocaleUpperCase('pt-BR'); if(SIGLAS.includes(up.replace(/[(),.:;]/g, ''))) return up; return i === 0 ? w.charAt(0).toLocaleUpperCase('pt-BR') + w.slice(1) : w; }).join(' ');
+}
+/* fecho solto no fim (Ilhéus, data / nome / cargo): sai do texto e vira o signatário */
+function tirarFechoLinhas(linhas){
+  const idx = []; linhas.forEach((l, i) => { if(l.trim()) idx.push(i); });
+  const ult = idx.slice(-5);
+  for(let k = ult.length - 1; k >= 0; k--){
+    const i = ult[k], t = norm(linhas[i].replace(/\*\*/g, '')).trim();
+    const pes = (settings.signatarios || []).find(s => norm(s.nome) === t);
+    if(!pes) continue;
+    let ini = i;
+    const ant = ult[k - 1] != null ? ult[k - 1] : -1;
+    if(ant >= 0 && /^ilh[eé]us\b|data da assinatura/i.test(linhas[ant].trim())) ini = ant;
+    return { linhas:linhas.slice(0, ini), pessoa:pes.id };
+  }
+  /* "Ilhéus, …" seguido de até 3 linhas curtas (nome, cargo, registro): fecho de alguém fora do cadastro */
+  const LOCAL = /^ilh[eé]us,?\s.*(data da assinatura( eletr[oô]nica)?|\d{4})[^A-Za-zÀ-ÿ]*$/i;
+  for(let k = ult.length - 1; k >= 0 && k >= ult.length - 4; k--){
+    const i = ult[k];
+    if(!LOCAL.test(linhas[i].replace(/\*\*|_/g, '').trim())) continue;
+    const depois = ult.slice(k + 1).map(j => linhas[j].replace(/\*\*/g, '').trim());
+    if(depois.some(t => t.length > 90)) break;
+    return { linhas:linhas.slice(0, i), pessoa:undefined, novo:pessoaSolta(depois) };
+  }
+  return { linhas, pessoa:undefined };
+}
+/* nome e cargo soltos no fim → signatário novo (só se parecer um nome de verdade) */
+function pessoaSolta(l){
+  const nome = (l[0] || '').replace(/[.;,]$/, '').trim();
+  if(!nome || /\d|\[|signat[aá]rio|assinatura|^nome\b/i.test(nome) || nome.split(/\s+/).length < 2 || nome.length > 70) return null;
+  const reg = l.slice(1).find(t => /\b(CREA|CAU|OAB|CRC|matr[ií]cula)\b/i.test(t)) || '';
+  const cargo = l.slice(1).find(t => t !== reg) || '';
+  return { nome:titleCase(nome), cargo:cargo.replace(/[.;]$/, ''), reg };
+}
+function dividirTeor(texto){
+  const L = String(texto || '').replace(/\r/g, '').split('\n');
+  const temSep = L.some(l => /^\s*={3,}\s*DOCUMENTO\s*:/i.test(l));
+  const partes = []; let cur = null;
+  const abre = (nome, sep) => { cur = { nome:nome || '', linhas:[], sep:!!sep }; partes.push(cur); };
+  const cheias = c => c.linhas.filter(x => x.trim()).length;
+  for(const l of L){
+    const m = /^\s*={3,}\s*DOCUMENTO\s*:\s*(.*?)\s*=*\s*$/i.exec(l);
+    if(m){ abre(m[1], true); continue; }
+    if(!temSep && ehLinhaTitulo(l) && tipoDoTitulo(l)){
+      const prim = cur && cur.linhas.find(x => x.trim());
+      if(!cur || cheias(cur) >= 2 || (prim && tipoDoTitulo(prim) === 'capa') || !prim) abre('', false);
+    }
+    if(!cur){ if(!l.trim()) continue; abre('', false); }
+    cur.linhas.push(l);
+  }
+  return partes.map(parteFinal).filter(Boolean);
+}
+function parteFinal(pt){
+  let ref;
+  let linhas = pt.linhas.filter(l => { const m = /^\s*@signat[aá]rio\s*:\s*(.+)$/i.exec(l); if(m){ ref = m[1].trim(); return false; } return true; });
+  while(linhas.length && !linhas[0].trim()) linhas.shift();
+  while(linhas.length && !linhas[linhas.length - 1].trim()) linhas.pop();
+  if(!linhas.length && !pt.nome) return null;
+  const fecho = tirarFechoLinhas(linhas); linhas = fecho.linhas;
+  const cheias = linhas.filter(l => l.trim());
+  const titulo = (cheias[0] || pt.nome || '').replace(/^#\s+/, '').replace(/\*\*/g, '').trim();
+  let tipo = tipoDoTitulo(pt.nome) || tipoDoTitulo(titulo) || 'livre';
+  const capa = tipo === 'capa' && cheias.length <= 1;
+  if(tipo === 'capa' && !capa) tipo = 'livre';
+  let pessoa = fecho.pessoa;
+  if(ref){ const r = pessoaDoRef(ref, null); if(r !== undefined) pessoa = r; }
+  return { nome:pt.nome ? nomeBonito(pt.nome) : ({ dfd:'DFD', etp:'ETP' }[tipo] || nomeBonito(titulo)), titulo:titulo || pt.nome, tipo, capa, texto:linhas.join('\n'), pessoa, ref:ref || null, novo:pessoa === undefined ? fecho.novo || null : null };
+}
+function htmlDaParte(pt, p){
+  if(pt.capa) return htmlCapa(pt.titulo || pt.nome);
+  const pronto = htmlDoTexto(pt.texto); if(pronto) return pronto;
+  if(/^\s*(# |## |= |\| |> )/m.test(pt.texto)) return tplParaHTML(pt.texto, p);
+  return tplParaHTML(mpiParaLinhas(pt.texto), p);
+}
+function pessoaPadrao(tipo, p){
+  if(tipo === 'capa' || tipo === 'anexo') return '__sem';
+  if(tipo === 'desp') return (autoridade() || {}).id || null;
+  if(['dfd', 'etp', 'pb', 'tr', 'nt', 'sol', 'decl'].includes(tipo)) return pessoaPorId('s2') ? 's2' : null;
+  const m = modelos().find(x => x.tipo === tipo);
+  return m ? sigDoModelo(m).pessoa : null;
+}
+
+/* ---------- encaixar os documentos colados na sequência do processo ---------- */
+const PISTAS = {
+  'desp-ini':[/despacho inicial/, /secretaria demandante|encaminh\w* (a|à|para a) (secretaria municipal de infraestrutura|seinfra)/],
+  'desp-dfd':[/formalizacao d[ae] demanda|\bdfd\b/, /designa|responsavel pela elaboracao/, /disponibilidade orcamentaria|contabil/],
+  'desp-etp':[/estudo tecnico preliminar|\betp\b/, /minuta/, /nucleo de licitac|secretaria de gestao/],
+  'desp-aut':[/nota tecnica/, /minuta|termo aditivo/],
+  'nt-sup':[/suplementar/], 'nt-prop':[/proposta/], 'nt':[/aditivo|pedido/]
+};
+function combina(d, pt){
+  const st = d.slotTipo || d.tipo;
+  if(st === 'capa') return !!pt.capa && capaChave(d.nome) === capaChave(pt.titulo || pt.nome);
+  if(pt.capa) return false;
+  if(st === 'pb') return pt.tipo === 'pb' || pt.tipo === 'tr';
+  return st === pt.tipo;
+}
+function preencher(d, pt, p, sigManual){
+  if(pt.capa){ return; }
+  d.html = htmlDaParte(pt, p); d.pags = null; d.base = null;
+  if(d.slotTipo === 'pb'){ d.tipo = pt.tipo; d.nome = pt.tipo === 'tr' ? 'Termo de referência' : 'Projeto básico'; }
+  const pes = sigManual !== undefined ? sigManual : pt.pessoa;
+  if(pes !== undefined){ d.sig = d.sig || novoSig(null); d.sig.sem = pes === '__sem'; d.sig.pessoa = pes && pes !== '__sem' ? pes : null; }
+}
+function docDaParte(pt, p, sigManual){
+  const pes = sigManual !== undefined ? sigManual : pt.pessoa !== undefined ? pt.pessoa : pessoaPadrao(pt.tipo, p);
+  if(pt.capa) return novaCapa(pt.titulo || pt.nome, pt.nome);
+  return { id:uid(), kind:'texto', nome:pt.nome, tipo:pt.tipo, modelo:'livre', sig:novoSig(pes && pes !== '__sem' ? pes : null, { sem:pes === '__sem', vinculo:!!(p && !p.avulsa && !p.avdoc) }),
+    html:htmlDaParte(pt, p), bras:settings.brasTexto || 'todas', linha:true, repo:false, criado:Date.now(), mpi:true };
+}
+/* põe o documento logo antes de "antesDe" (ou no fim) */
+function inserirAntes(p, d, antesDe){
+  const i = antesDe ? p.docs.indexOf(antesDe) : -1;
+  if(i >= 0) p.docs.splice(i, 0, d); else p.docs.push(d);
+}
+/* partes: resultado de dividirTeor · o.depois: id do documento depois do qual começam · o.sig: signatário escolhido na tela (só para 1 documento) */
+function encaixarTeor(p, partes, o){
+  o = o || {};
+  const out = [];
+  /* com a mesa aberta neste processo: grava a digitação antes e, no fim, redesenha a mesa;
+     senão o corpo velho da tela voltava por cima do texto encaixado (defeito da v5) */
+  const naMesa = VIEW === 'mesa' && M.p === p && pagesEl.dataset.proc === p.id;
+  if(naMesa) salvarTudo();
+  const principais = () => p.docs.filter(d => d.linha && !(d.pai && p.docs.some(y => y.id === d.pai && y.linha)));
+  /* ptr = de onde procurar a vaga da sequência; ins = onde entra o documento que não tem vaga
+     (com documento aberto: logo depois dele, mesmo com a sequência montada — antes ia parar antes da Capa) */
+  let ptr = 0, ultimo = null, ins = null;
+  if(o.depois){ const L = principais(), a = p.docs.find(x => x.id === o.depois); const pai = a && a.pai ? p.docs.find(x => x.id === a.pai) : a; const i = L.indexOf(pai); if(i >= 0){ ins = i + 1; if(!temEsqueleto(p)){ ptr = i + 1; ultimo = pai; } } }
+  for(const pt of partes){
+    if(pt.ref){ const r = pessoaDoRef(pt.ref, p); if(r !== undefined) pt.pessoa = r; }
+    if(pt.pessoa === undefined && pt.novo) pt.pessoa = garantirSignatario(pt.novo);
+    const L = principais();
+    const txt = norm(pt.texto.slice(0, 1500));
+    let alvo = null, melhor = -1;
+    if(temEsqueleto(p)){
+      for(let k = ptr; k < L.length; k++){
+        const d = L[k];
+        if(!d.slot || !combina(d, pt)) continue;
+        if(!(d.tipo === 'capa' || estaVazio(d))) continue;
+        const nota = (PISTAS[d.slot] || []).reduce((a, rx) => a + (rx.test(txt) ? 1 : 0), 0);
+        if(nota > melhor){ melhor = nota; alvo = d; }
+        if(pt.capa) break;
+      }
+    }
+    if(alvo){
+      preencher(alvo, pt, p, partes.length === 1 ? o.sig : undefined);
+      ptr = principais().indexOf(alvo) + 1; ins = ptr; ultimo = alvo; out.push({ d:alvo, novo:false });
+      continue;
+    }
+    const d = docDaParte(pt, p, partes.length === 1 ? o.sig : undefined);
+    const L2 = principais();
+    const antesDe = L2[ins != null ? ins : ptr] || null;
+    inserirAntes(p, d, antesDe);
+    (ANEXOS_TIPO[d.tipo] || []).forEach(a => p.docs.push(novaVaga(d, a)));
+    ordenarAnexos(p);
+    ptr = principais().indexOf(d) + 1; ins = ptr; ultimo = d; out.push({ d, novo:true });
+  }
+  touch(p); saveDB(true);
+  if(naMesa) renderMesa(true);
+  return out;
+}
+function avisoEncaixe(res){
+  const nov = res.filter(r => r.novo).length, enc = res.length - nov;
+  const partes = [];
+  if(enc) partes.push(plural(enc, 'documento entrou', 'documentos entraram') + ' no lugar da sequência');
+  if(nov) partes.push(plural(nov, 'documento novo', 'documentos novos') + ' na ordem colada');
+  return partes.join(' · ') + '.';
+}
+/* recalcula as folhas depois de montar (a diagramação real) */
+async function depoisDeMontar(p, res){
+  marcarUltimo(p);
+  if(VIEW === 'proc' && NAVP.proc === p.id) renderProcTela(); else abrirProcTela(p);
+  toast(avisoEncaixe(res), { ms:3200 });
+  try{ if(window.PDFLib && await recontar(p, false) && VIEW === 'proc' && NAVP.proc === p.id) renderProcTela(); }catch(e){}
+}
+
+/* ---------- caixinhas de anexo ---------- */
+const anexosAbertos = () => { DB.ui.anx = DB.ui.anx || {}; return DB.ui.anx; };
+function alternarAnexos(p, d){ const A = anexosAbertos(); if(A[d.id]) delete A[d.id]; else A[d.id] = true; saveDB(); renderProcTela(); }
+function preencherVaga(p, v){
+  escolherArquivos(async l => {
+    if(!p.docs.includes(v)) return;
+    const novos = await incluirArquivos(p, l, 'linha', v.id);
+    if(!novos.length) return;
+    novos.forEach((d, i) => { d.pai = v.pai; d.nome = novos.length > 1 ? v.nome + ' (' + (i + 1) + ')' : v.nome; d.vagaNome = v.nome; });
+    p.docs = p.docs.filter(x => x !== v); ordenarAnexos(p);
+    touch(p); saveDB(true); renderProcTela(); if(emSplit(p)) renderMesa(true);
+    toast('Anexado: ' + v.nome + '.');
+  });
+}
+function menuVaga(p, v, ancora){
+  menu(v.nome, [
+    { t:'Anexar o PDF', ic:'clip', fn:() => preencherVaga(p, v) },
+    { t:'Renomear a caixinha', ic:'pen', fn:async () => { const n = await perguntar('Renomear', 'Nome do anexo', v.nome); if(n){ v.nome = n; touch(p); saveDB(); renderProcTela(); } } },
+    '-',
+    { t:'Tirar esta caixinha', sub:'não vai ter este anexo', ic:'trash', danger:true, fn:() => { p.docs = p.docs.filter(x => x !== v); touch(p); saveDB(); renderProcTela(); } }
+  ], ancora);
+}
+async function novaCaixinha(p, d){
+  const n = await perguntar('Nova caixinha de anexo', 'Nome do anexo', '', 'Criar', { dica:'Ela fica esperando o PDF, embaixo de "' + d.nome + '".' });
+  if(!n) return;
+  const filhos = p.docs.filter(x => x.pai === d.id), ult = filhos[filhos.length - 1] || d;
+  p.docs.splice(p.docs.indexOf(ult) + 1, 0, novaVaga(d, n));
+  anexosAbertos()[d.id] = true; touch(p); saveDB(); renderProcTela();
+}
+/* apagou um anexo que veio de uma caixinha: a caixinha volta vazia */
+function voltarVaga(p, d){
+  if(!d.vagaNome || !d.pai || d.kind !== 'pdf') return;
+  if(p.docs.some(x => x !== d && x.pai === d.pai && (x.vagaNome === d.vagaNome || (x.kind === 'vaga' && x.nome === d.vagaNome)))) return;
+  const i = p.docs.indexOf(d); if(i < 0) return;
+  p.docs.splice(i, 0, { id:uid(), kind:'vaga', nome:d.vagaNome, pai:d.pai, linha:false, repo:false, criado:Date.now() });
+}
+
+/* ---------- inteiro teor do processo num PDF só ---------- */
+async function inteiroTeorPdf(p){
+  if(!precisaLibs()) return;
+  abrirMesa(p);
+  const b = busy('Montando o inteiro teor…');
+  try{
+    await new Promise(r => setTimeout(r, 300));
+    try{ await diagFila; }catch(e){}
+    await new Promise(r => setTimeout(r, 150));
+    try{ await diagFila; }catch(e){}
+  } finally { b.end(); }
+  entrarSelecao(true);
+  exportarFolhas(folhasTela(), 'previa');
+}
+
+/* ---------- novo processo: ficha de abertura e como começar ---------- */
+function aberturaSheet(o){
+  o = o || {};
+  const tipoIni = o.cat === 'aditivos' ? 'aditivos' : (!o.cat || o.cat === 'licitacoes') ? 'licitacoes' : 'outro';
+  const st = { tipo:tipoIni, modalidade:'Concorrência Eletrônica', srp:false, sec:'seinfra' };
+  const inp = (ph, extra) => h('input', Object.assign({ class:'abInp', placeholder:ph || '' }, extra || {}));
+  const f = { num:inp('opcional', { inputmode:'text' }), contratada:inp('nome da empresa'), contrato:inp('000/2026'), licNum:inp('000/2026') };
+  const obj = h('textarea', { class:'abObj', rows:2, placeholder:'Ex.: reforma da Escola Municipal …' });
+  const seg = h('div', { class:'seg abSeg' });
+  const grp = h('div', { class:'sgGrp abGrp' });
+  const inicio = h('div');
+  const linhaCampo = (rot, el) => h('label', { class:'sgRow abRow' }, h('span', null, rot), el);
+  const val = (t, v, fn) => { const b = h('button', { class:'sgRow', onclick:() => fn(b) }, h('span', null, t), h('span', { class:'v' }, h('span', null, v), h('i', { html:I.chevD, style:{ display:'flex' } }))); return b; };
+  const MODS_AB = ['Concorrência Eletrônica', 'Pregão Eletrônico', 'Dispensa de Licitação', 'Inexigibilidade', 'Adesão a Ata', 'Outra'];
+  function escolherSec(b){
+    popMenu(b, secretarias().map(s => ({ t:s.curto || s.nome, sub:(autoridadeDaSec(s.id) ? titleCase(autoridadeDaSec(s.id).nome) : 'sem autoridade definida'), on:st.sec === s.id, fn:() => { st.sec = s.id; pinta(); } }))
+      .concat(['-', { t:'+ Incluir nova', cls:'novo', fn:() => incluirSecretaria(id => { st.sec = id; pinta(); }) }]));
+  }
+  function pinta(){
+    seg.replaceChildren(...[['licitacoes', 'Licitação'], ['aditivos', 'Aditivo'], ['outro', 'Outro']].map(([k, t]) => h('button', { class:st.tipo === k ? 'on' : '', onclick:() => { st.tipo = k; pinta(); } }, t)));
+    const sec = secretariaPorId(st.sec) || secretarias()[0];
+    const rows = [linhaCampo('Nº do processo', f.num), h('div', { class:'sgRow abRow abObjRow' }, h('span', null, 'Objeto'), obj)];
+    if(st.tipo === 'licitacoes'){
+      rows.push(val('Modalidade', st.modalidade, b => popMenu(b, MODS_AB.map(m => ({ t:m, on:st.modalidade === m, fn:() => { st.modalidade = m; pinta(); } })))));
+      const sw = h('span', { class:'sw' }, h('input', { type:'checkbox', checked:st.srp, onchange:e => { st.srp = e.target.checked; } }), h('i'));
+      rows.push(h('label', { class:'sgRow' }, h('span', null, 'Registro de preços'), sw));
+    }
+    if(st.tipo === 'aditivos') rows.push(linhaCampo('Contratada', f.contratada), linhaCampo('Nº do contrato', f.contrato), linhaCampo('Nº da concorrência', f.licNum));
+    if(st.tipo !== 'outro') rows.push(val('Secretaria demandante', sec ? sec.curto || sec.nome : '—', escolherSec));
+    grp.replaceChildren(...rows);
+    const opc = (ic, t, sub, fn, lay) => h('button', { class:'aRow abOp', 'data-lay':lay, onclick:() => { const q = criar(); if(!q) return; s.fechar(); setTimeout(() => fn(q), 40); } },
+      h('span', { class:'abIc', html:I[ic] }), h('span', { class:'tx' }, h('b', null, t), h('span', null, sub)), h('span', { class:'chev', html:I.chevR }));
+    const lista = [];
+    if(st.tipo !== 'outro') lista.push(opc('layers', 'Sequência padrão', st.tipo === 'aditivos' ? 'Todos os documentos do aditivo, com capas e caixinhas de anexo' : 'Todos os documentos da licitação, com capas e caixinhas de anexo', q => { montarSequencia(q); abrirProcTela(q); toast('Sequência montada.'); }, 'abSeq'));
+    lista.push(opc('paste', 'Texto pronto', st.tipo === 'outro' ? 'Colar os documentos; o app reconhece cada um' : 'Colar o inteiro teor ou os documentos; cada um entra no lugar certo', q => { if(st.tipo !== 'outro') montarSequencia(q); abrirProcTela(q); setTimeout(() => textoPronto({ p:q, teor:true }), 120); }, 'abTexto'));
+    lista.push(opc('doc', 'Em branco', 'Só a ficha; os documentos entram depois', q => abrirProcTela(q), 'abVazio'));
+    inicio.replaceChildren(h('div', { class:'aSec' }, 'Como começar'), h('div', { class:'aGrp' }, lista));
+  }
+  function criar(){
+    const objeto = obj.value.trim();
+    const cat = st.tipo === 'outro' ? (o.cat && o.cat !== 'licitacoes' && o.cat !== 'aditivos' ? o.cat : 'diversos') : st.tipo;
+    const ficha = { extras:[], num:f.num.value.trim(), objeto, setor:settings.setor || '' };
+    if(st.tipo === 'licitacoes'){ ficha.modalidade = st.modalidade; ficha.srp = st.srp ? 'Sim' : 'Não'; ficha.tipoObj = 'Licitação'; }
+    if(st.tipo === 'aditivos'){ ficha.contratada = f.contratada.value.trim(); if(ficha.contratada){ const c = garantirContratada({ nome:ficha.contratada }); if(c){ ficha.cnpj = c.cnpj || ''; ficha.contratadaEnd = c.end || ''; ficha.contratadaResp = c.resp || ''; } } ficha.contrato = f.contrato.value.trim(); ficha.licNum = f.licNum.value.trim(); ficha.tipoObj = 'Aditivo'; }
+    if(st.tipo !== 'outro') ficha.secretaria = st.sec;
+    const n = o.pasta && noPorId(o.pasta), pasta = n && catDoNo(n) === cat ? o.pasta : null;
+    const q = novoProc({ cat, status:'Em elaboração', fls0:1, ficha, pasta });
+    DB.procs.push(q); marcarUltimo(q); saveDB(true);
+    if(VIEW === 'home') renderHome(); else redesenharNav();
+    return q;
+  }
+  pinta();
+  const s = sheet({ titulo:'Novo processo', cheio:true, corpo:[seg, grp, h('p', { class:'sgNota' }, 'O resto da ficha fica no + do processo. O que você puser aqui já entra nos documentos.'), inicio] });
+  setTimeout(() => obj.focus(), 150);
+}
+async function incluirSecretaria(depois){
+  const nome = await perguntar('Nova secretaria', 'Nome', 'Secretaria Municipal de ', 'Continuar'); if(!nome) return;
+  const pes = await escolher('Quem é a autoridade?', (settings.signatarios || []).map(x => [x.id, titleCase(x.nome), x.cargo]), null);
+  const id = 'sec' + uid();
+  const L = settings.secretarias = secretarias().slice();
+  L.push({ id, nome, curto:nome.replace(/^secretaria (municipal )?(de |da |do )?/i, '') });
+  const x = pes && pessoaPorId(pes); if(x) x.sec = id;
+  saveSettings(); if(depois) depois(id);
+}
+
+/* ===== n_capsula.js ===== */
+/* =====================================================================
+   Etapa 2 (28/09): cápsula fechada e aberta, botão S com bolinhas,
+   pandinho (seleção com o dedo e ímã), Copiar · Colar · Marca-texto com
+   comentário, selo do documento inteiro, Página inteira, Desfazer e
+   Novo documento em branco. Desenhos aprovados: manual-aprovado/01 a 07.
+   ===================================================================== */
+
+Object.assign(I, {
+  chevUU:P_('<path d="M6 12.5l6-6 6 6"/><path d="M6 18.5l6-6 6 6"/>', ' stroke-width="2.1"'),
+  todas:P_('<rect x="8" y="3" width="12" height="14" rx="2"/><path d="M5 7v11a3 3 0 0 0 3 3h8"/><path d="M11 10.2l2 2 3.8-4.2"/>'),
+  pgInt:P_('<rect x="5.5" y="3" width="13" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3.5"/>'),
+  selo:P_('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/>')
+});
+
+/* ---------- Desfazer: fotos do processo antes de cada mudança ---------- */
+const HIST = { pilhas:{}, ultT:0, max:30 };
+function sincronizar(){
+  if(!M.p || VIEW !== 'mesa' || pagesEl.dataset.proc !== M.p.id) return;
+  pagesEl.querySelectorAll('.page.txt .body').forEach(b => { const d = docById(b.parentElement.dataset.doc); if(d) d.html = htmlDoBody(b); });
+}
+const histFoto = p => JSON.stringify({ docs:p.docs, carimbo:p.carimbo, numerar:p.numerar, fls0:p.fls0, ficha:p.ficha });
+function histPush(rot){
+  const p = M.p; if(!p) return;
+  sincronizar();
+  const L = HIST.pilhas[p.id] = HIST.pilhas[p.id] || [], f = histFoto(p);
+  if(L.length && L[L.length - 1].f === f) return;
+  L.push({ f, rot:rot || '' }); if(L.length > HIST.max) L.shift();
+}
+function desfazer(){
+  const p = M.p; if(!p) return;
+  const L = HIST.pilhas[p.id] || [];
+  sincronizar();
+  const agora = histFoto(p);
+  while(L.length && L[L.length - 1].f === agora) L.pop();
+  const u = L.pop();
+  if(!u) return toast('Nada para desfazer.', { ms:1300 });
+  const o = JSON.parse(u.f);
+  for(const k in salvarT){ clearTimeout(salvarT[k]); salvarT[k] = 0; }
+  for(const k in diagT) clearTimeout(diagT[k]);
+  p.docs = o.docs; p.carimbo = o.carimbo; p.numerar = o.numerar; p.fls0 = o.fls0; if(o.ficha) p.ficha = o.ficha;
+  touch(p); saveDB(true);
+  fecharSelo(); esconderAcoes();
+  renderMesa(true);
+  if(M.split && typeof renderProcTela === 'function') renderProcTela();
+  if(PGI.on) pgiMostrar();
+  toast(u.rot ? 'Desfeito: ' + u.rot + '.' : 'Desfeito.', { ms:1400 });
+}
+/* digitação: uma foto no começo de cada rajada */
+pagesEl.addEventListener('beforeinput', ev => {
+  if(!ev.target.closest || !ev.target.closest('.body')) return;
+  const t = Date.now(); if(t - HIST.ultT > 1500) histPush('digitação'); HIST.ultT = t;
+}, true);
+
+/* ---------- a cápsula ---------- */
+const CAP = { aberta:false };
+const CAP_ITENS = [['girar', 'Girar', 'rotL'], ['todas', 'Todas', 'todas'], ['pginteira', 'Pág. inteira', 'pgInt'], ['desfazer', 'Desfazer', 'undo'],
+  ['novodoc', 'Novo doc.', 'docplus'], ['carimbar', 'Carimbar', 'selo'], ['numerar', 'Numerar', 'hash'], ['exportar', 'Exportar', 'share']];
+(function montarCapsula(){
+  const bot = $('aBot');
+  const alca = h('button', { class:'capAlca', 'aria-label':'Fechar as ferramentas' }, h('i'));
+  const grade = h('div', { class:'capGrade' }, alca, CAP_ITENS.map(([a, t, ic]) => h('button', { class:'capB' + (a === 'exportar' ? ' pri' : ''), dataset:{ cap:a }, 'aria-label':t }, h('span', { class:'bola', html:I[ic] }), h('small', null, t))));
+  bot.prepend(grade);
+  const ex = bot.querySelector('[data-a="expandir"]'); if(ex) ex.innerHTML = I.chevUU;
+  const pi = bot.querySelector('[data-a="pginteira"]'); if(pi) pi.innerHTML = I.pgInt;
+  bot.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-cap]'); if(b){ if(!M.editing) capAcao(b.dataset.cap, b); return; }
+    if(ev.target.closest('.capAlca')) capsula(false);
+  });
+  /* puxar a alcinha (ou a grade) para baixo fecha */
+  let y0 = null;
+  grade.addEventListener('pointerdown', ev => { y0 = ev.clientY; });
+  grade.addEventListener('pointerup', ev => { if(y0 != null && ev.clientY - y0 > 28) capsula(false); y0 = null; });
+})();
+function capsula(on){
+  CAP.aberta = !!on;
+  $('aBot').classList.toggle('aberta', CAP.aberta);
+  if(CAP.aberta){ fecharBolhasS(true); esconderAcoes(); pintarCapsula(); }
+}
+function pintarCapsula(){
+  const car = M.p ? carimboAtual() : 'nenhum', num = M.p ? numerarAtual() : false;
+  const set = (a, on) => { const b = $('aBot').querySelector('[data-cap="' + a + '"]'); if(b) b.classList.toggle('liga', !!on); };
+  $('aBot').classList.toggle('mesaPdf', !!(M.p && M.p.avulsa));
+  set('carimbar', car !== 'nenhum'); set('numerar', num); set('pginteira', PGI.on);
+}
+/* tocar no documento fecha a cápsula aberta */
+docEl.addEventListener('click', () => { if(CAP.aberta) capsula(false); });
+function capAcao(a, b){
+  if(!M.p) return;
+  switch(a){
+    case 'girar': {
+      const l = M.fsel && M.fsel.sel.size ? selecionadas() : [PGI.on ? PGI.lista[PGI.i] : folhaAtual()].filter(Boolean);
+      return girarFolhas(l);
+    }
+    case 'todas': return capTodas();
+    case 'pginteira': return pgInteira();
+    case 'desfazer': return desfazer();
+    case 'novodoc': return novoDocBranco();
+    case 'carimbar': return menuCarimbo(b);
+    case 'numerar': return numerarSheet();
+    case 'exportar': return capExportar(b);
+  }
+}
+function girarFolhas(l, g){
+  l = (l || []).filter(Boolean);
+  if(!l.length) return toast('Nenhuma folha na tela.');
+  g = g == null ? 270 : g;   /* 1 toque = 90° para a esquerda */
+  histPush('girar');
+  l.forEach(f => {
+    if(f.e){ f.e.r = (((f.e.r || 0) + g) % 360 + 360) % 360; return; }
+    const d = f.d; d.rotF = d.rotF || {};
+    const r = (((d.rotF[f.j] || 0) + g) % 360 + 360) % 360;
+    if(r) d.rotF[f.j] = r; else delete d.rotF[f.j];
+  });
+  depoisDeMudar(l.length === 1 ? 'Folha ' + l[0].fl + ' girada.' : plural(l.length, 'folha girada', 'folhas giradas') + '.');
+  if(PGI.on) pgiMostrar();
+}
+function capTodas(){
+  const d = M.cur && M.cur.d;
+  capsula(false); pgInteira(false);
+  entrarSelecao(false, 'folhas');
+  const ks = folhasTela().filter(f => !d || f.d === d || f.d.pai === d.id).map(f => f.key);
+  marcarFolhas(ks, true);
+}
+function capExportar(b){
+  if(M.p.avulsa) return enviarMesa(b);
+  const d = M.cur && M.cur.d;
+  if(d && typeof exportarDocSheet === 'function') return exportarDocSheet(d);
+  compartilharSheet();
+}
+/* ◀ ▲ ▼ ▶ sem texto na tela (PDF) ou na Página inteira: andam de folha em folha */
+function navFolha(a){
+  const passo = a === 'esq' || a === 'cima' ? -1 : 1;
+  if(PGI.on){ pgiIr(PGI.i + passo); return true; }
+  const d = M.cur && M.cur.d;
+  if(!curSel() && d && d.kind === 'pdf'){ acao(passo < 0 ? 'anterior' : 'proxima'); return true; }
+  return false;
+}
+/* folha de texto girada: aviso discreto (a folha sai girada no PDF) */
+function pintarGiros(d){
+  const pg = paginaEl(d.id); if(!pg) return;
+  pg.querySelectorAll('.giroV').forEach(x => x.remove());
+  const R = d.rotF || {}; if(!Object.keys(R).length) return;
+  const tops = [0].concat(Array.from(pg.querySelectorAll('.brk')).map(b => brkIni(b)));
+  tops.forEach((t, j) => { if(R[j]) pg.append(h('span', { class:'giroV', style:{ top:(t + 6) + 'px' } }, h('i', { html:I.rotL }), 'girada ' + (360 - R[j]) + '° no PDF')); });
+}
+
+/* ---------- Página inteira (o "Ctrl+0"): a folha como sai no PDF ---------- */
+const PGI = { on:false, i:0, lista:[], ger:0, el:null };
+function pgInteira(on){
+  if(on === undefined) on = !PGI.on;
+  if(!on){
+    if(!PGI.on) return;
+    const f = PGI.lista[PGI.i];
+    PGI.on = false; if(PGI.el) PGI.el.remove(); PGI.el = null;
+    document.body.classList.remove('pgInt'); pintarCapsula();
+    if(f) irParaFolha(f.fl);
+    return;
+  }
+  if(!precisaLibs()) return;
+  if(!temPdfjs()) return toast('O leitor de PDF ainda está carregando. Tente de novo em instantes.');
+  salvarTudo(); capsula(false); fecharBolhasS(true); fecharSelo(); esconderAcoes(); fecharTeclado();
+  PGI.lista = folhasTela(); if(!PGI.lista.length) return toast('Não há folhas neste processo.');
+  const f = folhaAtual(); PGI.i = Math.max(0, PGI.lista.findIndex(x => f && x.key === f.key));
+  PGI.on = true; document.body.classList.add('pgInt'); pintarCapsula();
+  const r = docEl.getBoundingClientRect();
+  const leg = h('div', { class:'pgiLeg' });
+  const folha = h('div', { class:'pgiFolha' }, h('canvas'));
+  PGI.el = h('div', { id:'pgIntV', style:{ top:r.top + 'px', height:r.height + 'px' } }, h('div', { class:'pgiArea' }, folha), leg);
+  screenEl.append(PGI.el);
+  let x0 = null, y0 = 0;
+  PGI.el.addEventListener('pointerdown', ev => { x0 = ev.clientX; y0 = ev.clientY; });
+  PGI.el.addEventListener('pointerup', ev => { if(x0 == null) return; const dx = ev.clientX - x0, dy = ev.clientY - y0; x0 = null; if(Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) pgiIr(PGI.i + (dx < 0 ? 1 : -1)); });
+  pgiMostrar();
+}
+function pgiIr(i){
+  if(i < 0) return toast('Primeira folha.', { ms:900 });
+  if(i >= PGI.lista.length) return toast('Última folha.', { ms:900 });
+  PGI.i = i; pgiMostrar();
+}
+async function pgiMostrar(){
+  if(!PGI.on || !PGI.el) return;
+  const antiga = PGI.lista[PGI.i];
+  PGI.lista = folhasTela();
+  if(antiga){ const k = PGI.lista.findIndex(x => x.key === antiga.key); if(k >= 0) PGI.i = k; }
+  PGI.i = Math.min(PGI.i, PGI.lista.length - 1);
+  const f = PGI.lista[PGI.i]; if(!f) return;
+  const g = ++PGI.ger, leg = PGI.el.querySelector('.pgiLeg'), area = PGI.el.querySelector('.pgiArea'), folha = PGI.el.querySelector('.pgiFolha'), cv = folha.querySelector('canvas');
+  const ult = PGI.lista[PGI.lista.length - 1];
+  leg.textContent = 'folha ' + f.fl + ' de ' + ult.fl + ' · deslize para os lados';
+  folha.classList.add('carregando');
+  try{
+    const bytes = await pdfDasFolhas([f], Object.assign({ titulo:'' }, optCarimbo()));
+    if(g !== PGI.ger) return;
+    const pdf = await pdfjsLib.getDocument(Object.assign({ data:bytes, isEvalSupported:false }, window.PDFJS_OPTS || {})).promise;
+    const pg = await pdf.getPage(1), v = pg.getViewport({ scale:1 });
+    const W = area.clientWidth - 40, H = area.clientHeight - 16, k = Math.min(W / v.width, H / v.height);
+    if(g !== PGI.ger) return;
+    folha.style.width = Math.round(v.width * k) + 'px'; folha.style.height = Math.round(v.height * k) + 'px';
+    await desenharPaginaPdf(cv, pdf, { s:0, r:0 }, Math.round(v.width * k));
+    try{ pdf.destroy(); }catch(e){}
+  }catch(e){ console.warn('página inteira', e); if(g === PGI.ger) leg.textContent = 'Não consegui mostrar esta folha.'; }
+  if(g === PGI.ger) folha.classList.remove('carregando');
+}
+
+/* ---------- botão S: as bolinhas de seleção ---------- */
+const SB = { aberto:false, modo:null, n:0, ini:0, fim:0, c:0, body:null, el:null };
+const SB_ITENS = [['a', 'a', 'Palavra'], ['S', 'S', 'Sentença'], ['P', '¶', 'Parágrafo'], ['i', 'i', 'Inteiro teor']];
+const SELX = { nossa:false };
+function inicioSentenca(S, c){
+  let k = c - 1;
+  if(k >= 0 && fimDeFrase(S, k)) k--;   /* cursor logo depois do ponto: é a frase que acabou ali */
+  for(; k >= 0; k--) if(S[k] === '\n' || fimDeFrase(S, k)) break;
+  let st = k + 1; while(st < S.length && ESP(S[st]) && S[st] !== '\n') st++;
+  return st;
+}
+const PONT_FIM = /[.,;:!?…)\]"”'»]/, PONT_INI = /[("“'«\[]/;
+function palavraEm(S, c){
+  const L = S.length; let i = c;
+  if(i >= L || ESP(S[i])){ while(i < L && ESP(S[i])) i++; if(i >= L){ i = c; while(i > 0 && ESP(S[i - 1])) i--; i = Math.max(0, i - 1); } }
+  let a = i; while(a > 0 && !ESP(S[a - 1])) a--;
+  let b = i; while(b < L && !ESP(S[b])) b++;
+  while(a < b && PONT_INI.test(S[a])) a++;
+  while(b > a && PONT_FIM.test(S[b - 1])) b--;
+  return [a, b];
+}
+function proxPalavra(S, fim){
+  const L = S.length; let i = fim;
+  while(i < L && !ESP(S[i])) i++;          /* resto da pontuação colada */
+  while(i < L && ESP(S[i])) i++;
+  if(i >= L) return fim;
+  let b = i; while(b < L && !ESP(S[b])) b++;
+  while(b > i && PONT_FIM.test(S[b - 1])) b--;
+  return b;
+}
+function paragrafoEm(S, c){ const a = S.lastIndexOf('\n', c - 1) + 1; let b = S.indexOf('\n', c); if(b < 0) b = S.length; return [a, b]; }
+function aplicarSel(MT, a, b){
+  const body = MT.body, A = domDePos(MT, a), B = domDePos(MT, b);
+  if(document.activeElement !== body){ body.setAttribute('inputmode', TEC.digitando ? 'text' : 'none'); body.focus({ preventScroll:true }); }
+  try{ window.getSelection().setBaseAndExtent(A.node, A.off, B.node, B.off); }catch(e){}
+  SELX.nossa = true;
+  /* o fim da seleção precisa ficar à vista, acima das bolinhas */
+  try{
+    const r = document.createRange(); r.setStart(B.node, B.off); r.collapse(true);
+    const rc = r.getClientRects()[0] || (B.node.nodeType === 1 ? B.node : B.node.parentElement).getBoundingClientRect(), d = docEl.getBoundingClientRect();
+    const baixo = SB.aberto ? d.top + d.height * 0.45 : d.bottom - 90;
+    if(rc.bottom > baixo) docEl.scrollTop += rc.bottom - baixo; else if(rc.top < d.top + 30) docEl.scrollTop -= d.top + 30 - rc.top;
+  }catch(e){}
+}
+function abrirBolhasS(btn){
+  if(SB.aberto) return fecharBolhasS();
+  capsula(false); fecharSelo(); esconderAcoes(); pgInteira(false);
+  let s = curSel(); if(!s) s = cursorNaTela();
+  if(!s){ const d = M.cur && M.cur.d; return toast(d && d.kind === 'pdf' ? 'Nesta folha de PDF ainda não dá para selecionar o texto.' : 'Toque no texto primeiro.'); }
+  const body = curBody(); if(!body) return toast('Toque no texto primeiro.');
+  const MT = mapaTexto(body), r = s.getRangeAt(0);
+  SB.body = body; SB.modo = null; SB.n = 0; SB.c = posDeDom(MT, r.startContainer, r.startOffset);
+  SB.aberto = true;
+  const rb = btn.getBoundingClientRect();
+  const veu = h('div', { class:'sVeu' });
+  const col = h('div', { class:'sCol', style:{ left:(rb.left + rb.width / 2 - 28) + 'px', bottom:(window.innerHeight - rb.top + 16) + 'px' } },
+    SB_ITENS.map(([k, letra, rot]) => h('div', { class:'sLin', dataset:{ k } }, h('button', { class:'sBol' + (k === 'i' ? ' it' : ''), dataset:{ k }, 'aria-label':rot }, letra), h('span', { class:'sRot' }, rot), h('b', { class:'sVez', hidden:true }))));
+  const sAz = h('button', { class:'sAz', style:{ left:(rb.left + rb.width / 2 - 26) + 'px', top:(rb.top + rb.height / 2 - 26) + 'px' }, 'aria-label':'Fechar as bolinhas' }, 'S');
+  SB.el = h('div', { id:'sCamada' }, veu, col, sAz);
+  SB.el.addEventListener('pointerdown', ev => ev.preventDefault());   /* não tira o foco do texto */
+  SB.el.addEventListener('mousedown', ev => ev.preventDefault());
+  SB.el.addEventListener('click', ev => {
+    const b = ev.target.closest('.sBol'); if(b) return tocarBolha(b.dataset.k);
+    fecharBolhasS();
+  });
+  document.body.append(SB.el);
+  document.body.classList.add('sAberto');
+}
+function tocarBolha(k){
+  const body = SB.body; if(!body || !body.isConnected) return fecharBolhasS(true);
+  const MT = mapaTexto(body), S = MT.str, L = S.length;
+  if(k === 'i'){ SB.modo = 'i'; SB.n = 1; SB.ini = 0; SB.fim = L; }
+  else if(k !== SB.modo){
+    SB.modo = k; SB.n = 1;
+    const c = Math.min(SB.c, L);
+    if(k === 'a') [SB.ini, SB.fim] = palavraEm(S, c);
+    else if(k === 'S'){ SB.ini = inicioSentenca(S, c); SB.fim = fimDaFrase(S, SB.ini); }
+    else [SB.ini, SB.fim] = paragrafoEm(S, c);
+  } else {
+    let nf = SB.fim;
+    if(k === 'a') nf = proxPalavra(S, SB.fim);
+    else if(k === 'S'){ let i = SB.fim; while(i < L && (ESP(S[i]))) i++; nf = i < L ? fimDaFrase(S, i) : SB.fim; }
+    else { let i = SB.fim; if(S[i] === '\n') i++; if(i < L){ const b = S.indexOf('\n', i); nf = b < 0 ? L : b; } }
+    if(nf <= SB.fim) return toast('Fim do documento.', { ms:1000 });
+    SB.fim = nf; SB.n++;
+  }
+  while(SB.fim > SB.ini && ESP(S[SB.fim - 1])) SB.fim--;
+  aplicarSel(MT, SB.ini, SB.fim);
+  SB.el.querySelectorAll('.sLin').forEach(l => {
+    const on = l.dataset.k === SB.modo;
+    l.querySelector('.sBol').classList.toggle('on', on);
+    const v = l.querySelector('.sVez'); v.hidden = !(on && SB.n > 1); v.textContent = '×' + SB.n;
+  });
+}
+function fecharBolhasS(silencioso){
+  if(!SB.aberto) return;
+  SB.aberto = false; if(SB.el) SB.el.remove(); SB.el = null;
+  document.body.classList.remove('sAberto');
+  if(!silencioso) setTimeout(mostrarAcoes, 30);
+}
+
+/* ---------- pandinho: tocar na bolinha vermelha do cursor e arrastar ---------- */
+let DRAG = null;
+function pandinhoEl(){ let p = $('pandinho'); if(!p){ p = h('div', { id:'pandinho', hidden:true }, h('img', { src:PANDA_SRC, alt:'' })); document.body.append(p); } return p; }
+function travaEl(){ let t = $('travaAqui'); if(!t){ t = h('div', { id:'travaAqui', hidden:true }, h('i'), h('span', null, 'trava aqui')); document.body.append(t); } return t; }
+/* o ímã: gruda no fim (ou começo) da sentença quando o dedo passa perto; senão, na palavra inteira */
+function ima(S, pos, dir){
+  const L = S.length;
+  if(dir > 0){
+    let melhor = null;
+    for(let k = Math.max(0, pos - 7); k < Math.min(L, pos + 6); k++){
+      if(S[k] === '\n' || fimDeFrase(S, k)){ let e = S[k] === '\n' ? k : k + 1; while(e < L && /["”')\]]/.test(S[e])) e++; if(melhor == null || Math.abs(e - pos) < Math.abs(melhor - pos)) melhor = e; }
+    }
+    if(melhor != null) return { pos:melhor, trava:true };
+    let i = pos;
+    if(i > 0 && !ESP(S[i - 1])) while(i < L && !ESP(S[i])) i++;
+    else while(i > 0 && ESP(S[i - 1])) i--;
+    return { pos:i, trava:false };
+  }
+  let melhor = null;
+  for(let k = Math.max(0, pos - 8); k < Math.min(L, pos + 6); k++){
+    if(k === 0 || S[k - 1] === '\n' || (k > 1 && ESP(S[k - 1]) && fimDeFrase(S, k - 2))){ if(ESP(S[k])) continue; if(melhor == null || Math.abs(k - pos) < Math.abs(melhor - pos)) melhor = k; }
+  }
+  if(melhor != null) return { pos:melhor, trava:true };
+  let i = pos; while(i > 0 && !ESP(S[i - 1])) i--;
+  return { pos:i, trava:false };
+}
+function ligarBola(bola){
+  if(bola._ligada) return; bola._ligada = true;
+  bola.addEventListener('pointerdown', ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const s = window.getSelection(), body = curBody(); if(!s || !s.rangeCount || !body) return;
+    const MT = mapaTexto(body);
+    DRAG = { id:ev.pointerId, x0:ev.clientX, y0:ev.clientY, moveu:false, body, MT, ancora:posDeDom(MT, s.focusNode, s.focusOffset), trava:null };
+    $('caret').classList.add('panda');
+    try{ bola.setPointerCapture(ev.pointerId); }catch(e){}
+  });
+  bola.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); });
+}
+window.addEventListener('pointermove', ev => {
+  if(!DRAG || ev.pointerId !== DRAG.id) return;
+  const dx = ev.clientX - DRAG.x0, dy = ev.clientY - DRAG.y0;
+  if(!DRAG.moveu){ if(Math.hypot(dx, dy) < 6) return; DRAG.moveu = true; const c = $('caret'); if(c) c.classList.add('arrasto'); esconderAcoes(); }
+  const pd = pandinhoEl(); pd.hidden = false; pd.style.left = (ev.clientX - 20) + 'px'; pd.style.top = (ev.clientY - 20) + 'px';
+  const dr = docEl.getBoundingClientRect();
+  if(ev.clientY > dr.bottom - 70) docEl.scrollTop += 14; else if(ev.clientY < dr.top + 60) docEl.scrollTop -= 14;
+  const cr = document.caretRangeFromPoint ? document.caretRangeFromPoint(ev.clientX, ev.clientY - 34) : null;
+  if(!cr || !DRAG.body.contains(cr.startContainer)) return;
+  const el = cr.startContainer.nodeType === 1 ? cr.startContainer : cr.startContainer.parentElement;
+  if(el && el.closest('.pgap')) return;
+  const S = DRAG.MT.str, p0 = posDeDom(DRAG.MT, cr.startContainer, cr.startOffset);
+  const dir = p0 >= DRAG.ancora ? 1 : -1, m = ima(S, p0, dir);
+  const A = domDePos(DRAG.MT, DRAG.ancora), B = domDePos(DRAG.MT, m.pos);
+  try{ window.getSelection().setBaseAndExtent(A.node, A.off, B.node, B.off); }catch(e){}
+  const t = travaEl();
+  if(m.trava){
+    if(DRAG.trava !== m.pos){ DRAG.trava = m.pos; if(navigator.vibrate) try{ navigator.vibrate(8); }catch(e){} }
+    try{ const r = document.createRange(); r.setStart(B.node, B.off); r.collapse(true); const rc = r.getClientRects()[0]; if(rc){ t.hidden = false; t.style.left = (rc.left - 1) + 'px'; t.style.top = rc.top + 'px'; t.querySelector('i').style.height = rc.height + 'px'; } }catch(e){}
+  } else { DRAG.trava = null; t.hidden = true; }
+});
+function fimDrag(ev){
+  if(!DRAG || (ev && ev.pointerId !== DRAG.id)) return;
+  const d = DRAG; DRAG = null;
+  pandinhoEl().hidden = true; travaEl().hidden = true;
+  const c = $('caret'); if(c) c.classList.remove('arrasto');
+  if(!d.moveu) return;   /* só tocou: a bolinha virou o panda e espera o dedo */
+  if(c) c.classList.remove('panda');
+  SELX.nossa = true; atualizarCaret(); mostrarAcoes();
+}
+window.addEventListener('pointerup', fimDrag); window.addEventListener('pointercancel', fimDrag);
+/* tocar em outro lugar: o panda volta a ser a bolinha vermelha */
+document.addEventListener('pointerdown', ev => {
+  if(ev.target.closest && ev.target.closest('#caret .bola, #selAcoes, #mtCom, #sCamada')) return;
+  const c = $('caret'); if(c) c.classList.remove('panda');
+  if(ev.target.closest && ev.target.closest('#pages .body')){ SELX.nossa = false; esconderAcoes(); }
+}, true);
+
+/* ---------- Copiar · Colar · Marca-texto ---------- */
+let CLIP = null;
+function trechoDaSel(){
+  const s = window.getSelection(); if(!s || !s.rangeCount || s.isCollapsed) return null;
+  const r = s.getRangeAt(0), el = r.commonAncestorContainer.nodeType === 1 ? r.commonAncestorContainer : r.commonAncestorContainer.parentElement;
+  const body = el && el.closest('#pages .body'); if(!body) return null;
+  const MT = mapaTexto(body), a = posDeDom(MT, r.startContainer, r.startOffset), b = posDeDom(MT, r.endContainer, r.endOffset);
+  const div = document.createElement('div'); div.append(r.cloneContents());
+  div.querySelectorAll('.pgap,.naoimp,#caret').forEach(x => x.remove());
+  return { text:MT.str.slice(Math.min(a, b), Math.max(a, b)), html:div.innerHTML, body };
+}
+pagesEl.addEventListener('copy', ev => {
+  const t = trechoDaSel(); if(!t || !ev.clipboardData) return;
+  ev.clipboardData.setData('text/plain', t.text); ev.clipboardData.setData('text/html', t.html); ev.preventDefault();
+  CLIP = { text:t.text, html:t.html };
+});
+function copiarSel(){
+  const t = trechoDaSel(); if(!t) return toast('Selecione algo primeiro.');
+  CLIP = { text:t.text, html:t.html };
+  copiarTexto(t.text, 'Copiado.');
+  esconderAcoes();
+}
+async function colarAqui(){
+  if(!curSel()) return toast('Toque no texto onde vai colar.');
+  histPush('colar');
+  let t = null;
+  if(PWA){ try{ if(navigator.clipboard && navigator.clipboard.readText) t = await navigator.clipboard.readText(); }catch(e){} }
+  esconderAcoes();
+  if(t != null && t.trim() && (!CLIP || t.trim() !== CLIP.text.trim())) return acao('colar');   /* veio de fora do app */
+  if(CLIP){ document.execCommand('insertHTML', false, CLIP.html); return; }
+  acao('colar');
+}
+function textosDaSel(r, body){
+  const out = [], w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, SEM_VAO);
+  let n;
+  while((n = w.nextNode())){
+    if(!r.intersectsNode(n)) continue;
+    const a = n === r.startContainer ? r.startOffset : 0, b = n === r.endContainer ? r.endOffset : n.data.length;
+    if(b > a && n.data.slice(a, b).length) out.push({ n, a, b });
+  }
+  return out;
+}
+function marcaTexto(){
+  const s = window.getSelection(); if(!s || !s.rangeCount || s.isCollapsed) return toast('Selecione o trecho primeiro.');
+  const r = s.getRangeAt(0), body = curBody(); if(!body) return;
+  const lista = textosDaSel(r, body); if(!lista.length) return;
+  histPush('marca-texto');
+  const tudoMarcado = lista.every(x => x.n.parentElement.closest('mark.mt'));
+  if(tudoMarcado){
+    new Set(lista.map(x => x.n.parentElement.closest('mark.mt'))).forEach(m => m.replaceWith(...m.childNodes));
+    toast('Marca-texto tirado.', { ms:1300 });
+  } else {
+    lista.forEach(({ n, a, b }) => {
+      if(n.parentElement.closest('mark.mt')) return;
+      if(b < n.data.length) n.splitText(b);
+      const alvo = a > 0 ? n.splitText(a) : n;
+      if(!alvo.data.trim() && !alvo.parentElement.closest('p,li,td,th,h1,h2,h3,blockquote')) return;
+      const m = document.createElement('mark'); m.className = 'mt'; alvo.before(m); m.append(alvo);
+    });
+    body.querySelectorAll('mark.mt').forEach(m => { let nx = m.nextSibling; while(nx && nx.nodeType === 1 && nx.matches('mark.mt') && !nx.dataset.c && !m.dataset.c){ m.append(...nx.childNodes); const z = nx; nx = nx.nextSibling; z.remove(); } });
+    toast('Marcado. Toque no trecho para escrever um comentário.', { ms:2200 });
+  }
+  body.normalize();
+  const f = document.createRange(); f.selectNodeContents(body); f.collapse(false);
+  try{ const e = r.endContainer.isConnected ? r : null; if(e){ s.collapseToEnd(); } else { s.removeAllRanges(); s.addRange(f); } }catch(e){}
+  esconderAcoes();
+  body.dispatchEvent(new Event('input'));
+}
+function mostrarAcoes(){
+  esconderAcoes();
+  if(!SELX.nossa || SB.aberto || DRAG) return;
+  const s = window.getSelection(); if(!s || !s.rangeCount || s.isCollapsed) return;
+  const r = s.getRangeAt(0), el = r.commonAncestorContainer.nodeType === 1 ? r.commonAncestorContainer : r.commonAncestorContainer.parentElement;
+  if(!el || !el.closest('#pages .body')) return;
+  const marcado = textosDaSel(r, el.closest('.body')).every(x => x.n.parentElement.closest('mark.mt'));
+  const box = h('div', { id:'selAcoes' },
+    h('button', { class:'saB', onclick:copiarSel }, h('i', { html:I.copy }), 'Copiar'),
+    (CLIP || PWA) ? h('button', { class:'saB', onclick:colarAqui }, h('i', { html:I.paste }), 'Colar') : null,
+    h('button', { class:'saB mt', onclick:marcaTexto }, h('i', { html:I.highlighter }), marcado ? 'Tirar marca' : 'Marca-texto'));
+  box.addEventListener('pointerdown', ev => ev.preventDefault());
+  document.body.append(box);
+  posAcoes();
+}
+function posAcoes(){
+  const box = $('selAcoes'); if(!box) return;
+  const s = window.getSelection(); if(!s || !s.rangeCount || s.isCollapsed) return esconderAcoes();
+  const rs = s.getRangeAt(0).getClientRects(); if(!rs.length) return;
+  const a = rs[0], z = rs[rs.length - 1], d = docEl.getBoundingClientRect(), W = window.innerWidth, bw = box.offsetWidth, bh = box.offsetHeight;
+  let y = a.top - bh - 12; if(y < d.top + 6) y = z.bottom + 14;
+  y = Math.min(y, d.bottom - bh - 80);
+  const x = Math.max(8, Math.min(W - bw - 8, (a.left + z.right) / 2 - bw / 2));
+  box.style.left = x + 'px'; box.style.top = y + 'px';
+}
+function esconderAcoes(){ const b = $('selAcoes'); if(b) b.remove(); }
+docEl.addEventListener('scroll', () => { if($('selAcoes')) requestAnimationFrame(posAcoes); }, { passive:true });
+document.addEventListener('selectionchange', () => { const s = window.getSelection(); if($('selAcoes') && (!s || s.isCollapsed)) esconderAcoes(); });
+
+/* comentário do marca-texto: tocar no trecho marcado abre a caixinha (pode ficar vazia) */
+pagesEl.addEventListener('click', ev => {
+  const m = ev.target.closest && ev.target.closest('.body mark.mt');
+  if(!m || DRAG || M.fsel || M.editing) return;
+  const s = window.getSelection(); if(s && !s.isCollapsed) return;
+  abrirComentario(m);
+});
+function abrirComentario(m){
+  fecharComentario();
+  const body = m.closest('.body');
+  const txa = h('textarea', { class:'txa', rows:'3', placeholder:'Comentário (pode ficar vazio)' }); txa.value = m.dataset.c || '';
+  const guardar = () => { const v = txa.value.trim(); if(v) m.dataset.c = v; else delete m.dataset.c; m.classList.toggle('com', !!v); if(body) body.dispatchEvent(new Event('input')); };
+  const box = h('div', { id:'mtCom' }, h('b', null, 'Comentário'), txa,
+    h('div', { class:'row' },
+      h('button', { class:'btn sm ghost danger', onclick:() => { histPush('marca-texto'); fecharComentario(true); m.replaceWith(...m.childNodes); if(body){ body.normalize(); body.dispatchEvent(new Event('input')); } } }, 'Tirar marca'),
+      h('button', { class:'btn sm acc', onclick:() => fecharComentario() }, 'Pronto')));
+  box._guardar = guardar;
+  document.body.append(box);
+  const r = m.getClientRects()[0] || m.getBoundingClientRect(), W = window.innerWidth, bw = Math.min(320, W - 24);
+  box.style.width = bw + 'px'; box.style.left = Math.max(12, Math.min(W - bw - 12, r.left)) + 'px';
+  const bh = box.offsetHeight, d = docEl.getBoundingClientRect();
+  box.style.top = (r.bottom + 10 + bh < d.bottom - 70 ? r.bottom + 10 : Math.max(d.top + 6, r.top - bh - 10)) + 'px';
+  setTimeout(() => document.addEventListener('pointerdown', foraComentario, true), 0);
+}
+function foraComentario(ev){ if(ev.target.closest && ev.target.closest('#mtCom')) return; fecharComentario(); }
+function fecharComentario(semGuardar){
+  const b = $('mtCom'); document.removeEventListener('pointerdown', foraComentario, true);
+  if(!b) return; if(!semGuardar && b._guardar) b._guardar(); b.remove();
+}
+
+/* ---------- selo do documento inteiro ---------- */
+const SELO = { d:null };
+function pintarSelos(){
+  if(!M.p) return;
+  pagesEl.querySelectorAll('.seloB,.seloI,.ndBola').forEach(x => x.remove());
+  M.p.docs.filter(d => d.linha).forEach(d => {
+    const pg = pagesEl.querySelector('.page[data-doc="' + d.id + '"]'); if(!pg) return;
+    if(d.vazio){ pg.append(h('button', { class:'ndBola', 'aria-label':'Escolher o que entra neste documento', html:I.plusBold, onclick:ev => { ev.stopPropagation(); menuNovoVazio(d, ev.currentTarget); } })); return; }
+    const b = h('button', { class:'seloB' + (SELO.d === d.id ? ' on' : ''), 'aria-label':'Selecionar o documento inteiro', html:I.selo });
+    b.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); });
+    b.addEventListener('click', ev => { ev.stopPropagation(); SELO.d === d.id ? fecharSelo() : abrirSelo(d); });
+    pg.append(b);
+  });
+  if(SELO.d) pintarFosco();
+  if(M.p.avulsa) pintarCarimbos();
+}
+function pintarFosco(){
+  pagesEl.querySelectorAll('.page.inteiro').forEach(p => p.classList.remove('inteiro'));
+  const d = SELO.d && docById(SELO.d); if(!d) return;
+  pagesEl.querySelectorAll('.page').forEach(pg => { const x = docById(pg.dataset.doc); if(x && (x === d || x.pai === d.id)) pg.classList.add('inteiro'); });
+}
+function abrirSelo(d){
+  fecharSelo(); capsula(false); fecharBolhasS(true); esconderAcoes();
+  SELO.d = d.id; pintarFosco();
+  const pg = pagesEl.querySelector('.page[data-doc="' + d.id + '"]'); if(!pg) return;
+  const selo = pg.querySelector('.seloB'); if(selo) selo.classList.add('on');
+  const bi = h('button', { class:'seloI', 'aria-label':'Opções do documento inteiro' }, 'i');
+  bi.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); });
+  bi.addEventListener('click', ev => { ev.stopPropagation(); menuSelo(d, bi); });
+  pg.append(bi);
+  menuSelo(d, bi);
+}
+function menuSelo(d, ancora){
+  const txt = d.kind === 'texto', n = M.p.docs.filter(x => x.pai === d.id && x.linha).length;
+  popMenu(ancora, [
+    { t:'Exportar tudo num PDF só', sub:n ? 'este documento e ' + plural(n, 'o PDF anexado', 'os PDFs anexados') + ', na ordem' : 'este documento, como sai no PDF', ic:'share', fn:() => pdfDoSelo(d, 'compartilhar') },
+    txt ? { t:'Substituir: colar texto novo', sub:'entra no padrão, venha como vier', ic:'paste', fn:() => colarSheet(d) } : null,
+    txt ? { t:'Copiar o documento inteiro', ic:'copy', fn:() => { const b = bodyDoDoc(d); if(!b) return; const MT = mapaTexto(b); CLIP = { text:MT.str, html:htmlDoBody(b) }; copiarTexto(MT.str, 'Documento copiado.'); } } : null,
+    { t:'Imprimir', ic:'print', fn:() => pdfDoSelo(d, 'imprimir') }
+  ]);
+}
+async function pdfDoSelo(d, como){
+  if(!precisaLibs()) return;
+  salvarTudo();
+  const l = folhasTela().filter(f => f.d === d || f.d.pai === d.id);
+  if(!l.length) return toast('Este documento não tem folhas.');
+  const b = busy('Montando o PDF…');
+  try{
+    const bytes = await pdfDasFolhas(l, Object.assign({ titulo:d.nome }, optCarimbo()));
+    b.end();
+    const nome = safeName(d.nome + (l.some(f => f.d !== d) ? ' (com anexos)' : ''), '.pdf');
+    if(como === 'imprimir') return imprimirBytes(bytes, nome);
+    offer(bytes, nome);
+  }catch(e){ b.end(); console.error(e); toast('Não foi possível montar o PDF: ' + (e.message || e)); }
+}
+function fecharSelo(){
+  if(!SELO.d) return;
+  SELO.d = null;
+  pagesEl.querySelectorAll('.page.inteiro').forEach(p => p.classList.remove('inteiro'));
+  pagesEl.querySelectorAll('.seloB.on').forEach(b => b.classList.remove('on'));
+  pagesEl.querySelectorAll('.seloI').forEach(b => b.remove());
+}
+pagesEl.addEventListener('pointerdown', ev => { if(SELO.d && !(ev.target.closest && ev.target.closest('.seloB,.seloI'))) fecharSelo(); });
+
+/* ---------- colar texto novo: sai no padrão, venha como vier ---------- */
+function colarSheet(d, o){
+  o = o || {};
+  const txa = h('textarea', { class:'txa tpTxa', placeholder:'Cole aqui o texto.\n\nA primeira linha vira o título; "De:", "Para:" e "Assunto:" ficam no bloco de cima; o resto vira parágrafos. "Ilhéus, …" e o nome do signatário no fim viram o fecho.' });
+  const colar = async () => {
+    try{ const t = navigator.clipboard && navigator.clipboard.readText ? await navigator.clipboard.readText() : ''; if(!t) throw 0; txa.value = t; }
+    catch(e){ txa.focus(); toast('Toque e segure dentro da caixa e escolha Colar.'); }
+  };
+  sheet({ titulo:o.titulo || (d.vazio ? 'Colar texto' : 'Substituir o texto'), cheio:true, corpo:[
+    h('div', { class:'tpBar' }, h('button', { class:'btn sm', onclick:colar }, h('span', { html:I.paste }), 'Colar'), h('span', { class:'tpConta' }), h('button', { class:'btn sm ghost', onclick:() => { txa.value = ''; txa.focus(); } }, 'Limpar')),
+    txa, h('p', { class:'ndOnde' }, d.vazio ? 'Entra no lugar do documento novo, no padrão.' : 'O texto de "' + d.nome + '" é trocado por este, no padrão. Dá para desfazer na cápsula.')],
+    botoes:[{ t:'Cancelar', v:'ghost' }, { t:d.vazio ? 'Pôr no documento' : 'Substituir', v:'acc', fn:() => { if(!txa.value.trim()){ toast('Cole o texto primeiro.'); return false; } substituirTexto(d, txa.value); } }] });
+}
+function substituirTexto(d, texto){
+  const p = M.p; if(!p || !d) return;
+  const partes = dividirTeor(texto);
+  if(!partes.length) return;
+  histPush(d.vazio ? 'colar texto' : 'substituir');
+  if(d.vazio && partes.length > 1){
+    /* inteiro teor com vários documentos: cada um entra no lugar dele */
+    const i = p.docs.indexOf(d), antes = i > 0 ? p.docs[i - 1].id : null;
+    p.docs.splice(i, 1);
+    const res = encaixarTeor(p, partes, { depois:antes });
+    saveDB(true); renderMesa(true);
+    if(typeof depoisDeMontar === 'function') depoisDeMontar(p, res);
+    return;
+  }
+  const pt = partes.length > 1 ? parteFinal({ nome:'', linhas:String(texto).replace(/\r/g, '').split('\n') }) : partes[0];
+  if(!pt) return;
+  if(pt.pessoa === undefined && pt.novo) pt.pessoa = garantirSignatario(pt.novo);
+  d.html = htmlDaParte(pt, p); d.pags = null; d.base = null;
+  if(d.vazio){
+    delete d.vazio; d.tipo = pt.capa ? 'capa' : pt.tipo; d.nome = pt.nome || titleOf(d.html);
+    const pes = pt.pessoa !== undefined ? pt.pessoa : pessoaPadrao(pt.tipo, p);
+    d.sig = novoSig(pes && pes !== '__sem' ? pes : null, { sem:pes === '__sem' || !!pt.capa, vinculo:procReal(p) });
+  } else if(pt.pessoa !== undefined){ d.sig = d.sig || novoSig(null); d.sig.sem = pt.pessoa === '__sem'; d.sig.pessoa = pt.pessoa && pt.pessoa !== '__sem' ? pt.pessoa : null; }
+  touch(p); saveDB(true); fecharSelo();
+  renderMesa(true); setTimeout(() => irParaDoc(d.id), 60);
+  if(M.split && typeof renderProcTela === 'function') renderProcTela();
+  toast('Texto no padrão.', { ms:1400 });
+}
+
+/* ---------- Novo doc.: folha em branco logo depois deste, com uma bolinha no meio ---------- */
+const NDV = { id:null, p:null, t:0 };
+function novoDocBranco(){
+  const p = M.p; if(!p) return;
+  histPush('novo documento'); salvarTudo(); capsula(false); pgInteira(false);
+  const atual = M.cur && M.cur.d;
+  const d = { id:uid(), kind:'texto', nome:'Documento novo', tipo:'livre', modelo:'livre', vazio:true, sig:novoSig(null, { sem:true, vinculo:procReal(p) }),
+    html:'<p><br></p>', bras:settings.brasTexto || 'todas', linha:true, repo:false, criado:Date.now(), mpi:true };
+  porNaLinha(p, d, atual ? (atual.pai || atual.id) : null);
+  depoisDeIncluir(p, d);
+}
+function menuNovoVazio(d, ancora){
+  const p = M.p;
+  popMenu(ancora, [
+    { t:'Colar texto', sub:'sai no padrão sozinho', ic:'paste', fn:() => colarNoVazio(d) },
+    p.avulsa ? null : { t:'Modelo', sub:'despacho, DFD, ETP, CI, ofício, nota técnica…', ic:'doc', fn:() => { NDV.id = d.id; NDV.p = p.id; NDV.t = Date.now(); irParaDoc(d.id); novoDocumentoModelo({}); } },
+    { t:'Anexar PDF ou foto', ic:'clip', fn:() => anexarNoVazio(d) }
+  ]);
+}
+async function colarNoVazio(d){
+  let t = '';
+  try{ if(navigator.clipboard && navigator.clipboard.readText) t = await navigator.clipboard.readText(); }catch(e){}
+  if(t && t.trim()) return substituirTexto(d, t);
+  colarSheet(d);
+}
+function anexarNoVazio(d){
+  const p = M.p;
+  escolherArquivos(async l => {
+    const novos = await incluirArquivos(p, l, 'linha', d.id);
+    if(!novos.length) return;
+    histPush('anexar');
+    const k = p.docs.indexOf(d); if(k >= 0) p.docs.splice(k, 1);
+    touch(p); saveDB(true);
+    depoisDeIncluir(p, novos[0]);
+    toast(novos.length === 1 ? 'PDF no lugar do documento novo.' : novos.length + ' arquivos no lugar do documento novo.');
+  });
+}
+/* documento criado por modelo a partir da folha em branco: a folha em branco sai */
+function tirarVazio(p, novo){
+  if(!NDV.id || !p || NDV.p !== p.id || Date.now() - NDV.t > 20 * 60000){ return; }
+  const i = p.docs.findIndex(x => x.id === NDV.id && x.vazio);
+  if(i >= 0 && (!novo || novo.id !== NDV.id)) p.docs.splice(i, 1);
+  NDV.id = null;
+}
+/* folha em branco que ficou vazia some ao sair */
+function limparVazios(p){
+  if(!p) return;
+  const antes = p.docs.length;
+  p.docs = p.docs.filter(d => !(d.vazio && !String(d.html || '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()));
+  if(p.docs.length !== antes){ touch(p); saveDB(true); }
+}
+/* digitou na folha em branco: vira documento de verdade */
+pagesEl.addEventListener('input', ev => {
+  const b = ev.target.closest && ev.target.closest('.page.txt .body'); if(!b) return;
+  const d = docById(b.parentElement.dataset.doc); if(!d || !d.vazio || !b.textContent.trim()) return;
+  delete d.vazio; d.sig = d.sig || novoSig(null); d.sig.sem = false;
+  const bo = b.parentElement.querySelector('.ndBola'); if(bo) bo.remove();
+  setTimeout(() => { d.nome = titleOf(htmlDoBody(b)) || 'Documento novo'; const l = pagesEl.querySelector('[data-lab="' + d.id + '"] .dn'); if(l) l.textContent = d.nome; atualizarFecho(d); saveDB(); }, 500);
+});
+
+/* ---------- modo de edição da tela: Desfazer ---------- */
+const LAYH = { pilha:[], ult:null };
+function layHistIniciar(){ LAYH.pilha = []; LAYH.ult = JSON.stringify(layUI()); }
+function layHistGuardar(){
+  const agora = JSON.stringify(settings.layUI || {});
+  if(LAYH.ult != null && agora !== LAYH.ult){ LAYH.pilha.push(LAYH.ult); if(LAYH.pilha.length > 60) LAYH.pilha.shift(); }
+  LAYH.ult = agora;
+}
+function desfazerLayout(){
+  const v = LAYH.pilha.pop();
+  if(v == null) return toast('Nada para desfazer.', { ms:1200 });
+  settings.layUI = JSON.parse(v); LAYH.ult = v;
+  lsSet('settings', settings); kvSet('settings', settings);
+  aplicarLayUI();
+  if(LAY.mapa && typeof renderMapa === 'function') renderMapa();
+  toast('Desfeito.', { ms:1100 });
+}
+
+/* ===== o_campos.js ===== */
+/* =====================================================================
+   Etapa 3 (28/09): campos de tocar no documento, "+ Incluir novo" nas
+   listas e cadastro de signatários. Desenho aprovado: manual-aprovado/08.
+   ===================================================================== */
+
+/* ---------- signatários: cadastro único, em ordem alfabética ---------- */
+function garantirSignatario(novo, silencioso){
+  if(!novo || !novo.nome) return null;
+  const L = settings.signatarios = settings.signatarios || [];
+  const ja = L.find(s => norm(s.nome) === norm(novo.nome));
+  if(ja){ if(novo.cargo && !ja.cargo){ ja.cargo = novo.cargo; saveSettings(); } return ja.id; }
+  const x = { id:uid(), nome:titleCase(String(novo.nome).trim()), cargo:String(novo.cargo || '').trim() };
+  if(novo.reg && String(novo.reg).trim()) x.reg = String(novo.reg).trim();
+  L.push(x); ordenarSignatarios(); saveSettings();
+  if(!silencioso) toast(x.nome + ' entrou na lista de signatários.', { ms:2200 });
+  return x.id;
+}
+/* lista suspensa de signatários, com "+ Incluir novo" (vale para o app inteiro) */
+function menuSignatario(ancora, atual, fn, o){
+  o = o || {};
+  ordenarSignatarios();
+  const itens = (settings.signatarios || []).map(x => ({ t:titleCase(x.nome), sub:x.cargo, on:atual === x.id, fn:() => fn(x.id) }));
+  itens.push('-');
+  if(o.sem) itens.push({ t:'Sem assinatura', sub:'anexo, planilha', on:atual === '__sem', fn:() => fn('__sem') });
+  itens.push({ t:'+ Incluir novo', cls:'novo', fn:() => incluirSignatarioSheet(fn, o.pre) });
+  return popMenu(ancora, itens);
+}
+function incluirSignatarioSheet(cb, pre){
+  pre = pre || {};
+  const nome = h('input', { class:'inp', placeholder:'Nome completo', value:pre.nome || '', autocapitalize:'words' });
+  const cargo = h('input', { class:'inp', placeholder:'Cargo (ex.: Engenheiro Civil)', value:pre.cargo || '' });
+  const reg = h('input', { class:'inp', placeholder:'Registro, se houver (ex.: CREA nº …)', value:pre.reg || '' });
+  const s = sheet({ titulo:'Novo signatário', corpo:[
+    h('label', { class:'fld' }, h('span', null, 'Nome'), nome),
+    h('label', { class:'fld' }, h('span', null, 'Cargo'), cargo),
+    h('label', { class:'fld' }, h('span', null, 'Registro (opcional)'), reg),
+    h('p', { class:'sgNota' }, 'Fica na lista de signatários do app inteiro, em ordem alfabética. O registro sai embaixo do cargo, no fecho.')],
+    botoes:[{ t:'Cancelar', v:'ghost' }, { t:'Incluir', v:'acc', fn:() => {
+      if(!nome.value.trim()){ toast('Escreva o nome.'); nome.focus(); return false; }
+      if(!cargo.value.trim()){ toast('Escreva o cargo.'); cargo.focus(); return false; }
+      const id = garantirSignatario({ nome:nome.value, cargo:cargo.value, reg:reg.value }, true);
+      toast('Incluído na lista de signatários.', { ms:1500 });
+      if(cb) cb(id);
+    } }] });
+  setTimeout(() => { if(!nome.value) nome.focus(); }, 120);
+  return s;
+}
+
+/* ---------- fecho: tocar no nome troca o signatário; tocar na data escolhe física/eletrônica ---------- */
+function mudarSig(d, patch, aviso){
+  if(!d) return;
+  if(typeof histPush === 'function') histPush('signatário');
+  d.sig = Object.assign({}, d.sig || novoSig(null), patch);
+  const p = procDoDoc(d) || M.p; if(p) touch(p);
+  saveDB();
+  if(VIEW === 'mesa') atualizarFecho(d);
+  if(aviso) toast(aviso, { ms:1400 });
+}
+function tocarFecho(d, ev){
+  if(M.fsel || M.editing) return;
+  const alvo = ev.target.closest('.loc, .n1, .n2');
+  if(!alvo) return sigSheet(d);
+  ev.stopPropagation();
+  if(alvo.classList.contains('loc')) return menuDataFecho(d, alvo);
+  const s = d.sig || {};
+  menuSignatario(alvo, s.sem ? '__sem' : s.pessoa, id => mudarSig(d, { pessoa:id === '__sem' ? null : id, sem:id === '__sem' }, id === '__sem' ? 'Sem assinatura.' : 'Signatário trocado.'), { sem:true });
+}
+function menuDataFecho(d, ancora){
+  const s = d.sig || {}, fis = s.modo === 'fisica';
+  popMenu(ancora, [
+    { t:'Assinatura eletrônica', sub:'"Ilhéus, data da assinatura eletrônica."', on:!fis, fn:() => mudarSig(d, { modo:'eletronica', data:null }, 'Assinatura eletrônica.') },
+    { t:'Assinatura física (caneta)', sub:fis ? 'com a data ' + dataBR(s.data || hojeISO()) : 'escolher a data no calendário', on:fis, fn:() => escolherDataFecho(d) },
+    fis ? { t:'Mudar a data…', fn:() => escolherDataFecho(d) } : null
+  ]);
+}
+function escolherDataFecho(d){
+  const s = d.sig || {};
+  const inp = h('input', { class:'inp', type:'date', value:s.data || hojeISO() });
+  sheet({ titulo:'Data da assinatura', corpo:[h('label', { class:'fld' }, h('span', null, 'Assinatura física, com a data'), inp),
+    h('p', { class:'sgNota' }, 'A data entra no fecho e na tarja do pé da folha.')],
+    botoes:[{ t:'Cancelar', v:'ghost' }, { t:'OK', v:'acc', fn:() => mudarSig(d, { modo:'fisica', data:inp.value || hojeISO() }, 'Assinatura física, ' + dataBR(inp.value || hojeISO()) + '.') }] });
+  setTimeout(() => { try{ inp.focus(); if(inp.showPicker) inp.showPicker(); }catch(e){} }, 150);
+}
+
+/* ---------- colar no padrão dentro do editor: com o inteiro teor marcado, o texto colado substitui o documento ---------- */
+function inteiroMarcado(body){
+  const s = window.getSelection(); if(!s || !s.rangeCount || s.isCollapsed) return false;
+  if(!body.contains(s.anchorNode) || !body.contains(s.focusNode)) return false;
+  const tudo = mapaTexto(body).str.replace(/\s+/g, ''), sel = String(s).replace(/\s+/g, '');
+  return tudo.length > 0 && sel.length >= tudo.length * 0.97;
+}
+function colarNoInteiro(body, d, cd){
+  if(!inteiroMarcado(body)) return false;
+  let t = cd.getData('text/plain') || '';
+  if(!t.trim()){ const hh = cd.getData('text/html'); if(hh){ const x = document.createElement('div'); x.innerHTML = hh; t = x.innerText; } }
+  if(!t.trim()) return false;
+  if(typeof fecharBolhasS === 'function') fecharBolhasS(true);
+  substituirTexto(d, t);
+  return true;
+}
+
+/* =====================================================================
+   Etapa 3, parte 2 (28/09): campos pontilhados, PCA, contratada,
+   destinatários e replicação ficha ↔ documentos (desenho 08).
+   ===================================================================== */
+
+/* ---------- PCA: a frase sai da ficha (p.ficha.pca = 'Não consta' | 'Consta', p.ficha.pcaItem) ---------- */
+const PCA_OPC = ['Não consta', 'Consta'];
+function pcaFrase(p){
+  const f = (p && p.ficha) || {};
+  if(f.pca === 'Consta') return 'A presente contratação consta da versão atual do Plano de Contratações Anual (PCA), item nº ' + (String(f.pcaItem || '').trim() || '[__]') + '.';
+  return PCA_NAO_CONSTA;
+}
+
+/* ---------- mudar a ficha e levar a mudança a todos os documentos do processo ---------- */
+function mudarFicha(p, patch, aviso){
+  if(!p) return 0;
+  if(VIEW === 'mesa' && M.p === p){ if(typeof histPush === 'function') histPush('campo'); salvarTudo(); }
+  const antes = clone(p.ficha || {});
+  p.ficha = Object.assign({ extras:[] }, p.ficha || {}, patch);
+  touch(p);
+  const velhos = new Map(p.docs.map(x => [x, x.html]));
+  replicarFicha(p, antes);
+  const mudados = p.docs.filter(x => x.html !== velhos.get(x));
+  if(VIEW === 'mesa' && M.p === p) mudados.forEach(x => {
+    const pg = paginaEl(x.id), b = pg && pg.querySelector('.body');
+    if(b){ b.innerHTML = x.html || '<p><br></p>'; prepararCorpo(b, x); diagramar(x); }
+  });
+  saveDB(true);
+  if(aviso) toast(aviso + (mudados.length > 1 ? ' ' + plural(mudados.length, 'documento atualizado', 'documentos atualizados') + '.' : ''), { ms:1800 });
+  return mudados.length;
+}
+/* valor digitado no documento → formato da ficha */
+const MARC_CALCULADOS = ['revit', 'revit_inicio', 'revit_codigo', 'secretaria_demandante', 'autoridade_demandante', 'cargo_autoridade_demandante', 'srp', 'pca'];
+function valorParaFicha(campo, txt){
+  const def = FICHA.find(x => x[0] === campo), tipo = def ? def[2] : 'text';
+  if(tipo === 'money'){ const n = numBR(txt); return n == null ? txt : String(Math.round(n * 100) / 100); }
+  if(tipo === 'date'){ const m = String(txt).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m) return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); const m2 = String(txt).match(/^\d{4}-\d{2}-\d{2}$/); return m2 ? txt : null; }
+  if(tipo === 'number'){ const m = String(txt).match(/\d+/); return m ? m[0] : null; }
+  return txt;
+}
+function gravarCampo(p, k, txt){
+  if(!p || !k || MARC_ESPECIAIS.includes(k) || MARC_CALCULADOS.includes(k)) return false;
+  const campo = MARCADORES[k];
+  if(campo){
+    const v = valorParaFicha(campo, txt); if(v == null) return false;
+    mudarFicha(p, { [campo]:v }, 'Ficha atualizada.');
+    return true;
+  }
+  const ex = ((p.ficha && p.ficha.extras) || []).map(e => Object.assign({}, e));
+  const e = ex.find(x => chaveExtra(x.k) === k);
+  if(e) e.v = txt; else ex.push({ k:MARC_ROTULO[k] || k.replace(/_/g, ' '), v:txt });
+  mudarFicha(p, { extras:ex }, 'Ficha atualizada.');
+  return true;
+}
+
+/* ---------- tocar nos campos: um toque (listas) abre o menu; dois toques escrevem ali ---------- */
+const CAMPO_TOQUE = { t:0, el:null };
+let CAMPO_ED = null;
+const ehDestinatario = sp => sp.classList.contains('campo') && /^\[(destinat[aá]rio|setor( de destino)?)\]$/i.test(sp.textContent.trim());
+function tocarCampo(e, body, d){
+  if(M.fsel || M.editing || (CAMPO_ED && CAMPO_ED.sp.contains(e.target))) return;
+  const sp = e.target.closest('.fc[data-f], .campo');
+  if(!sp || !body.contains(sp)) return;
+  const k = sp.dataset.f, agora = Date.now(), dois = CAMPO_TOQUE.el === sp && agora - CAMPO_TOQUE.t < 420;
+  CAMPO_TOQUE.t = agora; CAMPO_TOQUE.el = sp;
+  if(k === 'pca') return menuPca(sp, d);
+  if(k === 'contratada') return menuContratadaCampo(sp, d, body);
+  if(ehDestinatario(sp)) return menuDestinatario(sp, nome => trocarCampoTexto(sp, nome, body, d), () => editarCampo(sp, body, d));
+  if(dois){ CAMPO_TOQUE.el = null; e.preventDefault(); return editarCampo(sp, body, d); }
+  /* o segundo toque não pode cair na bolinha do cursor (ela viraria o pandinho) */
+  const cr = document.getElementById('caret');
+  if(cr){ cr.classList.add('fcTap'); clearTimeout(CAMPO_TOQUE.tm); CAMPO_TOQUE.tm = setTimeout(() => cr.classList.remove('fcTap'), 450); }
+  if(sp.classList.contains('campo') || sp.classList.contains('vazio')) selecionarNo(sp);
+}
+/* escreve ali, com a letra do documento: só o campo fica editável até sair */
+function editarCampo(sp, body, d){
+  if(CAMPO_ED) CAMPO_ED.fim();
+  const antes = sp.textContent;
+  if(typeof histPush === 'function') histPush('campo');
+  body.contentEditable = 'false';
+  sp.classList.add('fcEd'); sp.contentEditable = 'true'; sp.setAttribute('inputmode', 'text'); sp.setAttribute('enterkeyhint', 'done');
+  const tecla = ev => {
+    if(ev.key === 'Enter'){ ev.preventDefault(); fim(); }
+    else if(ev.key === 'Escape'){ ev.preventDefault(); sp.textContent = antes; fim(); }
+  };
+  const sair = () => setTimeout(fim, 0);
+  function fim(){
+    if(!CAMPO_ED || CAMPO_ED.sp !== sp) return;
+    CAMPO_ED = null;
+    sp.removeEventListener('keydown', tecla); sp.removeEventListener('blur', sair);
+    sp.classList.remove('fcEd'); sp.removeAttribute('contenteditable'); sp.removeAttribute('inputmode'); sp.removeAttribute('enterkeyhint');
+    body.contentEditable = 'true';
+    const txt = sp.textContent.replace(/\s+/g, ' ').trim();
+    if(!txt){ sp.textContent = antes; return; }
+    if(txt === antes.trim()) return;
+    sp.textContent = txt;
+    if(!/^\[.*\]$/.test(txt)){ sp.classList.remove('campo'); sp.classList.remove('vazio'); }
+    d.html = htmlDoBody(body); saveDB();
+    const p = procDoDoc(d) || M.p, k = sp.dataset.f;
+    if(!(k && gravarCampo(p, k, txt))){ if(p) touch(p); diagramar(d); }
+  }
+  CAMPO_ED = { sp, fim };
+  sp.addEventListener('keydown', tecla); sp.addEventListener('blur', sair);
+  sp.focus(); selecionarNo(sp);
+}
+/* troca um [campo] por um texto escolhido da lista */
+function trocarCampoTexto(sp, txt, body, d){
+  if(typeof histPush === 'function') histPush('campo');
+  sp.textContent = txt; sp.classList.remove('campo'); sp.classList.remove('vazio');
+  d.html = htmlDoBody(body); const p = procDoDoc(d) || M.p; if(p) touch(p); saveDB(); diagramar(d);
+}
+
+/* ---------- PCA: menu do campo ---------- */
+function menuPca(ancora, d){
+  const p = procDoDoc(d) || M.p; if(!p) return;
+  const f = p.ficha || {}, consta = f.pca === 'Consta';
+  popMenu(ancora, [
+    { t:'Não consta do PCA', sub:'entra a frase padrão', on:!consta, fn:() => mudarFicha(p, { pca:'Não consta' }, 'PCA: não consta.') },
+    { t:'Consta do PCA — item nº' + (consta && f.pcaItem ? ' ' + f.pcaItem : '…'), sub:'a frase se monta sozinha', on:consta, fn:() => itemPca(p) }
+  ]);
+}
+async function itemPca(p){
+  const n = await perguntar('Consta do PCA', 'Item nº', (p.ficha && p.ficha.pcaItem) || '', 'OK');
+  if(n == null) return;
+  mudarFicha(p, { pca:'Consta', pcaItem:String(n).trim() }, 'PCA: consta, item nº ' + (String(n).trim() || '__') + '.');
+}
+
+/* ---------- contratadas: cadastro único (nome, CNPJ, endereço, responsável) ---------- */
+const contratadas = () => (settings.contratadas = settings.contratadas || []).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+function garantirContratada(x){
+  if(!x || !String(x.nome || '').trim()) return null;
+  const L = settings.contratadas = settings.contratadas || [];
+  const nome = String(x.nome).trim(), ja = L.find(c => norm(c.nome) === norm(nome));
+  const campos = ['cnpj', 'end', 'resp'];
+  if(ja){ let m = false; campos.forEach(k => { const v = String(x[k] || '').trim(); if(v && v !== ja[k]){ ja[k] = v; m = true; } }); if(m) saveSettings(); return ja; }
+  const n = { id:uid(), nome }; campos.forEach(k => { const v = String(x[k] || '').trim(); if(v) n[k] = v; });
+  L.push(n); saveSettings(); return n;
+}
+const patchContratada = x => ({ contratada:x.nome, cnpj:x.cnpj || '', contratadaEnd:x.end || '', contratadaResp:x.resp || '' });
+function menuContratada(ancora, atual, fn, o){
+  o = o || {};
+  const itens = contratadas().map(x => ({ t:x.nome, sub:x.cnpj ? 'CNPJ ' + x.cnpj : 'sem CNPJ no cadastro', on:!!atual && norm(x.nome) === norm(atual), fn:() => fn(x) }));
+  if(itens.length) itens.push('-');
+  if(o.escrever) itens.push({ t:'Escrever aqui', sub:'dois toques também escrevem', fn:o.escrever });
+  itens.push({ t:'+ Incluir novo', cls:'novo', fn:() => incluirContratadaSheet(fn, o.pre) });
+  return popMenu(ancora, itens);
+}
+function incluirContratadaSheet(cb, pre){
+  pre = pre || {};
+  const nome = h('input', { class:'inp', placeholder:'Razão social', value:pre.nome || '' });
+  const cnpj = h('input', { class:'inp', placeholder:'00.000.000/0000-00', inputmode:'numeric', value:pre.cnpj || '' });
+  const end = h('input', { class:'inp', placeholder:'Rua, nº, bairro, cidade-UF', value:pre.end || '' });
+  const resp = h('input', { class:'inp', placeholder:'Nome do responsável', value:pre.resp || '', autocapitalize:'words' });
+  const s = sheet({ titulo:'Nova contratada', corpo:[
+    h('label', { class:'fld' }, h('span', null, 'Nome'), nome),
+    h('label', { class:'fld' }, h('span', null, 'CNPJ'), cnpj),
+    h('label', { class:'fld' }, h('span', null, 'Endereço'), end),
+    h('label', { class:'fld' }, h('span', null, 'Responsável'), resp),
+    h('p', { class:'sgNota' }, 'Fica no cadastro do app inteiro e entra nos documentos como {{contratada}}, {{cnpj}}, {{contratada_endereco}} e {{contratada_responsavel}}.')],
+    botoes:[{ t:'Cancelar', v:'ghost' }, { t:'Incluir', v:'acc', fn:() => {
+      if(!nome.value.trim()){ toast('Escreva o nome.'); nome.focus(); return false; }
+      const x = garantirContratada({ nome:nome.value, cnpj:cnpj.value, end:end.value, resp:resp.value });
+      toast('Incluída no cadastro de contratadas.', { ms:1500 });
+      if(cb) cb(x);
+    } }] });
+  setTimeout(() => { if(!nome.value) nome.focus(); }, 120);
+  return s;
+}
+function menuContratadaCampo(sp, d, body){
+  const p = procDoDoc(d) || M.p; if(!p) return;
+  menuContratada(sp, p.ficha && p.ficha.contratada, x => mudarFicha(p, patchContratada(x), 'Contratada: ' + x.nome + '.'), { escrever:() => editarCampo(sp, body, d) });
+}
+
+/* ---------- destinatários: setores e secretarias, com + Incluir novo ---------- */
+function destinatarios(){
+  if(!Array.isArray(settings.destinatarios)) settings.destinatarios = [];
+  const L = [...settings.destinatarios, ...SETORES, ...secretarias().map(s => s.nome)];
+  const vistos = new Set();
+  return L.filter(x => { const k = norm(x); if(vistos.has(k)) return false; vistos.add(k); return true; }).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+function menuDestinatario(ancora, fn, escrever){
+  const itens = destinatarios().map(x => ({ t:x, fn:() => fn(x) }));
+  itens.push('-');
+  if(escrever) itens.push({ t:'Escrever aqui', fn:escrever });
+  itens.push({ t:'+ Incluir novo', cls:'novo', fn:async () => {
+    const n = await perguntar('Novo destinatário', 'Setor ou órgão', '', 'Incluir'); if(!n || !String(n).trim()) return;
+    const t = String(n).trim(); settings.destinatarios = settings.destinatarios || [];
+    if(!destinatarios().some(x => norm(x) === norm(t))){ settings.destinatarios.push(t); saveSettings(); toast('Incluído na lista de destinatários.', { ms:1400 }); }
+    fn(t);
+  } });
+  return popMenu(ancora, itens);
+}
+
+/* ===== p_export.js ===== */
+/* =====================================================================
+   Etapa 4 (28/09): Exportar de cada documento (desenho 09), módulo
+   pré-minuta, imprimir e renumeração automática da lista do processo
+   ===================================================================== */
+const NOME_CARIMBO = { licitacao:'Carimbo Licitação P.M.I.', seinfra:'Carimbo SEINFRA' };
+const temMarcas = d => !!(d && ((d.kind === 'texto' && /<mark\b[^>]*\bmt\b/.test(d.html || '')) || (d.kind === 'pdf' && d.pl.some(e => !e.d && e.mk && e.mk.length))));
+/* carimbo que o Exportar usa quando ligado: o da pasta; se a pasta está sem carimbo, o padrão do tipo de processo */
+function carimboDoExport(p){ const c = carimboAtual(p); return c !== 'nenhum' ? c : (ehLicAdt(p) ? 'licitacao' : 'seinfra'); }
+
+/* ---------- renumeração: textos que ainda não foram diagramados ganham o nº real de folhas ---------- */
+const RECONTA = {};
+function recontarLista(p){
+  if(!p || RECONTA[p.id] || !window.PDFLib) return;
+  if(!p.docs.some(d => d.linha && d.kind === 'texto' && !d.pags)) return;
+  RECONTA[p.id] = true;
+  setTimeout(async () => {
+    let mudou = false;
+    try{ mudou = await recontar(p, false); }catch(e){}
+    RECONTA[p.id] = false;
+    if(mudou && VIEW === 'proc' && NAVP.proc === p.id) renderProcTela();
+  }, 60);
+}
+
+/* ---------- Exportar de cada documento ---------- */
+function exportarDocSheet(d){
+  const p = procDoDoc(d) || M.p; if(!p || !d) return;
+  salvarTudo();
+  const txt = d.kind === 'texto', lic = procReal(p);
+  const st = { fmt:txt ? (settings.expFmt || 'ambos') : 'pdf', car:carimboAtual(p) !== 'nenhum', tipo:carimboDoExport(p), marcas:false };
+  const seg = h('div', { class:'seg expSeg' }), grp = h('div', { class:'sgGrp expGrp' }), mais = h('div', { class:'sgGrp expGrp' });
+  const sw = (on, fn, rot) => h('span', { class:'sw' }, h('input', { type:'checkbox', checked:on, 'aria-label':rot, onchange:e => fn(e.target.checked) }), h('i'));
+  const linha2 = (t, sub) => h('span', { class:'expTx' }, h('span', null, t), sub ? h('small', null, sub) : null);
+  const val = (t, v, fn, cls) => { const b = h('button', { class:'sgRow ' + (cls || ''), onclick:() => fn(b) }, h('span', null, t), h('span', { class:'v' }, h('span', null, v), h('i', { html:I.chevR, style:{ display:'flex' } }))); return b; };
+  function flsTxt(){
+    const F = folhas(p)[d.id]; if(!F || !numerarAtual(p)) return '';
+    return F.k > 1 ? ' · fls. ' + F.ini + '–' + F.fim : ' · fl. ' + F.ini;
+  }
+  function pinta(){
+    if(txt) seg.replaceChildren(...[['word', 'Word'], ['pdf', 'PDF'], ['ambos', 'Word e PDF']].map(([k, t]) => h('button', { class:st.fmt === k ? 'on' : '', 'data-fmt':k, onclick:() => { st.fmt = k; settings.expFmt = k; saveSettings(); pinta(); } }, t)));
+    seg.hidden = !txt;
+    const rows = [];
+    if(st.fmt !== 'word') rows.push(h('label', { class:'sgRow expCar' }, linha2('Com carimbo', st.car ? NOME_CARIMBO[st.tipo] + (carimboAtual(p) !== 'nenhum' ? ' (pela pasta)' : '') + flsTxt() : 'sem carimbo e sem número'), sw(st.car, v => { st.car = v; pinta(); }, 'Com carimbo')));
+    if(temMarcas(d)) rows.push(h('label', { class:'sgRow expMar' }, linha2('Com marcações', st.marcas ? 'o marca-texto sai no arquivo' : 'o marca-texto fica só na tela'), sw(st.marcas, v => { st.marcas = v; pinta(); }, 'Com marcações')));
+    if(txt){
+      const sg = d.sig || {}, pes = sg.pessoa ? pessoaPorId(sg.pessoa) : null;
+      rows.push(val('Signatário', sg.sem ? 'Sem assinatura' : pes ? titleCase(pes.nome) : 'Escolher', b => menuSignatario(b, sg.sem ? '__sem' : sg.pessoa, id => { mudarSig(d, id === '__sem' ? { pessoa:null, sem:true } : { pessoa:id, sem:false }); pinta(); }, { sem:true }), 'expSig'));
+      rows.push(val('Assinatura', sg.modo === 'fisica' ? 'Física · ' + dataBR(sg.data || hojeISO()) : 'Eletrônica', b => popMenu(b, [
+        { t:'Eletrônica', sub:'"Ilhéus, data da assinatura eletrônica."', on:sg.modo !== 'fisica', fn:() => { mudarSig(d, { modo:'eletronica', data:null }); pinta(); } },
+        { t:'Física (caneta)', sub:'escolher a data', on:sg.modo === 'fisica', fn:() => dataFisica(d, pinta) }
+      ]), 'expAss'));
+    }
+    grp.replaceChildren(...rows); grp.hidden = !rows.length;
+    const ms = [];
+    if(lic) ms.push(h('button', { class:'sgRow expPre', onclick:() => { s.fechar(); preMinutaPdf(p, opcoes()); } }, linha2('Módulo pré-minuta', rotuloPreMinuta(p)), h('i', { html:I.chevR, style:{ display:'flex', color:'var(--faint)' } })));
+    ms.push(h('button', { class:'sgRow expImp', onclick:() => { s.fechar(); imprimirDoc(d, p, opcoes()); } }, linha2('Imprimir', 'abre a impressão do Android'), h('i', { html:I.print, style:{ display:'flex', color:'var(--accent)' } })));
+    mais.replaceChildren(...ms);
+  }
+  const opcoes = () => ({ fmt:st.fmt, carimbo:st.car ? st.tipo : 'nenhum', numerar:st.car && numerarAtual(p), marcas:st.marcas });
+  pinta();
+  const s = sheet({ titulo:'Exportar', corpo:[seg, grp, h('div', { class:'lbl expLbl' }, 'Mais'), mais],
+    botoes:[{ t:'Exportar', v:'pri expBtn', fn:() => { exportarDoc(d, p, opcoes()); } }] });
+  s.el.classList.add('expSh');
+  return s;
+}
+function dataFisica(d, pinta){
+  const s = d.sig || {};
+  const inp = h('input', { class:'inp', type:'date', value:s.data || hojeISO() });
+  sheet({ titulo:'Data da assinatura', corpo:[h('label', { class:'fld' }, h('span', null, 'Assinatura física, com a data'), inp), h('p', { class:'sgNota' }, 'A data entra no fecho e na tarja do pé da folha.')],
+    botoes:[{ t:'Cancelar', v:'ghost' }, { t:'OK', v:'acc', fn:() => { mudarSig(d, { modo:'fisica', data:inp.value || hojeISO() }); pinta(); } }] });
+  setTimeout(() => { try{ inp.focus(); if(inp.showPicker) inp.showPicker(); }catch(e){} }, 150);
+}
+/* PDF de um documento só, com o carimbo e o número real das folhas no processo */
+async function pdfDoDoc(d, p, o){
+  const opt = { carimbo:o.carimbo || 'nenhum', numerar:!!o.numerar, titulo:d.nome };
+  const l = VIEW === 'mesa' && M.p === p ? folhasTela().filter(f => f.d === d) : [];
+  if(l.length) return pdfDasFolhas(l, opt);
+  const bytes = await bytesDoc(d, p);
+  const mk = PDF_MARCAS && d.kind === 'pdf' && temMarcas(d);
+  if(opt.carimbo === 'nenhum' && !opt.numerar && !mk) return bytes;
+  const out = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption:true });
+  if(mk) desenharMarcas(out, vivas(d).map((e, i) => [i, e]));
+  const R = await recursos(out, { carimbo:opt.carimbo });
+  const F = folhas(p)[d.id] || { ini:1 };
+  carimbar(out, R, { carimbo:opt.carimbo, numerar:opt.numerar, numeros:out.getPages().map((_, i) => F.ini + i), deitada:settings.deitada });
+  return out.save();
+}
+async function comMarcas(o, fn){ PDF_MARCAS = !!o.marcas; try{ return await fn(); } finally { PDF_MARCAS = false; } }
+async function exportarDoc(d, p, o){
+  if(!precisaLibs()) return;
+  const b = busy(o.fmt === 'ambos' ? 'Gerando Word e PDF…' : o.fmt === 'word' ? 'Gerando Word…' : 'Gerando PDF…');
+  let arqs = [];
+  try{
+    arqs = await comMarcas(o, async () => {
+      const r = [];
+      if(o.fmt !== 'word') r.push({ data:await pdfDoDoc(d, p, o), nome:nomeArquivo(d, '.pdf') });
+      if(o.fmt !== 'pdf' && d.kind === 'texto') r.push({ data:await buildDocx(htmlDoc(d), d, p), nome:nomeArquivo(d, '.docx') });
+      return r;
+    });
+  }catch(e){ b.end(); console.error(e); return toast(e && e.message === 'vazio' ? 'O documento está vazio.' : 'Não foi possível exportar.'); }
+  b.end();
+  if(arqs.length === 1) await offer(arqs[0].data, arqs[0].nome); else await offerVarios(arqs);
+  aposExportar(d, p);
+}
+async function imprimirDoc(d, p, o){
+  if(!precisaLibs()) return;
+  const b = busy('Montando o PDF…');
+  let bytes;
+  try{ bytes = await comMarcas(o, () => pdfDoDoc(d, p, o)); }catch(e){ b.end(); console.error(e); return toast('Não foi possível montar o PDF.'); }
+  b.end();
+  imprimirBytes(bytes, nomeArquivo(d, '.pdf'));
+}
+/* Word e PDF juntos: um compartilhamento só (WhatsApp, Gmail, Drive…) */
+async function offerVarios(arqs){
+  if(!PWA && window.claude && window.claude.use){ for(const a of arqs) await offer(a.data, a.nome); return; }
+  const ext = n => (n.match(/\.([a-z0-9]+)$/i) || [, ''])[1].toLowerCase();
+  const files = arqs.map(a => new File([a.data instanceof Blob ? a.data : new Blob([a.data])], a.nome, { type:MIME[ext(a.nome)] || 'application/octet-stream' }));
+  let pode = false;
+  try{ pode = !!(navigator.canShare && navigator.canShare({ files })); }catch(e){}
+  const baixar = () => { files.forEach((f, i) => setTimeout(() => { const a = h('a', { href:URL.createObjectURL(f), download:f.name }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); }, i * 400)); toast(plural(files.length, 'arquivo baixado', 'arquivos baixados') + '.'); };
+  sheet({ titulo:'Arquivos prontos', corpo:files.map(f => h('div', { class:'opt expArq' }, h('span', { html:ext(f.name) === 'docx' ? I.word : I.pdf }), h('b', { class:'grow', style:{ overflowWrap:'anywhere' } }, f.name))).concat(
+    pode ? [h('p', { class:'muted', style:{ margin:0, fontSize:'13px' } }, (files.length === 2 ? 'Compartilhar manda os dois' : 'Compartilhar manda todos') + ' de uma vez: WhatsApp, Gmail, Drive…')] : []),
+  botoes:[
+    pode ? { t:'Compartilhar', v:'acc', ic:'share', fn:async () => { try{ await navigator.share({ files, title:files[0].name }); }catch(e){ if(!e || e.name !== 'AbortError') toast('Não foi possível compartilhar. Use Baixar.'); } } } : null,
+    { t:'Baixar', v:pode ? 'ghost' : 'pri', ic:'dl', fn:baixar }
+  ] });
+}
+
+/* ---------- módulo pré-minuta: do 1º documento (DFD ou Despacho inicial) até o despacho que manda à Secretaria de Gestão ---------- */
+const FIM_PRE = { licitacoes:'desp-etp', aditivos:'desp-aut' };
+const textoHtml = d => (d.html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+const ehMarcador = d => d.tipo === 'capa';
+const ehPops = d => /\bPOPS\b|preliminar sint[eé]tica/i.test((d.vagaNome || '') + ' ' + (d.nome || ''));
+function faixaPreMinuta(p){
+  const linha = p.docs.filter(d => d.linha && !d.pai);
+  const ini = linha.find(d => d.kind === 'texto' && !ehMarcador(d));
+  if(!ini) return null;
+  const i0 = linha.indexOf(ini);
+  let fim = linha.find((d, i) => i >= i0 && d.slot && d.slot === FIM_PRE[p.cat]);
+  if(!fim) fim = linha.filter((d, i) => i > i0 && d.kind === 'texto' && (d.tipo === 'desp' || /^despacho/i.test(d.nome))).find(d => /secretaria (municipal )?de gest[aã]o|minuta/i.test(textoHtml(d)));
+  if(!fim) return null;
+  const principais = linha.slice(i0, linha.indexOf(fim) + 1);
+  return { ini, fim, principais };
+}
+function rotuloPreMinuta(p){
+  const f = faixaPreMinuta(p);
+  if(!f) return 'falta o despacho que manda à Secretaria de Gestão';
+  return 'do ' + (f.ini.slot === 'desp-ini' || f.ini.tipo === 'desp' ? 'Despacho inicial' : f.ini.nome) + ' até o despacho pré-minuta, num PDF só';
+}
+async function garantirMesa(p){
+  if(!(VIEW === 'mesa' && M.p === p)) abrirMesa(p);
+  await new Promise(r => setTimeout(r, 300));
+  try{ await diagFila; }catch(e){}
+  await new Promise(r => setTimeout(r, 150));
+  try{ await diagFila; }catch(e){}
+}
+/* as folhas da pré-minuta, na ordem: folha-marcador vazia fica de fora; a POPS vem logo depois do 1º documento */
+function folhasPreMinuta(p, f){
+  const docsOk = new Set();
+  for(const d of f.principais){
+    const filhos = p.docs.filter(x => x.pai === d.id && x.linha);
+    if(ehMarcador(d) && !filhos.some(x => x.kind === 'pdf')) continue;
+    docsOk.add(d); filhos.forEach(x => docsOk.add(x));
+  }
+  let l = folhasTela().filter(x => docsOk.has(x.d));
+  const pops = l.filter(x => x.d.kind === 'pdf' && ehPops(x.d));
+  if(pops.length){
+    l = l.filter(x => !pops.includes(x));
+    let k = 0; while(k < l.length && l[k].d === f.ini) k++;
+    l.splice(k, 0, ...pops);
+  }
+  const n0 = l.length ? l[0].fl : 1;
+  return l.map((x, i) => Object.assign({}, x, { fl:n0 + i }));
+}
+async function preMinutaPdf(p, o){
+  if(!precisaLibs()) return;
+  o = o || { carimbo:carimboAtual(p), numerar:numerarAtual(p), marcas:false };
+  salvarTudo();
+  const f = faixaPreMinuta(p);
+  if(!f) return toast('Falta o despacho que manda à Secretaria de Gestão para a minuta. Inclua esse despacho e tente de novo.', { ms:5000 });
+  const b = busy('Montando a pré-minuta…');
+  let bytes, l;
+  try{
+    await garantirMesa(p);
+    l = folhasPreMinuta(p, f);
+    if(!l.length) throw new Error('sem folhas');
+    bytes = await comMarcas(o, () => pdfDasFolhas(l, { carimbo:o.carimbo || 'nenhum', numerar:!!o.numerar, titulo:'Pré-minuta – ' + tituloProc(p) }));
+  }catch(e){ b.end(); console.error(e); return toast('Não foi possível montar a pré-minuta: ' + (e.message || e)); }
+  b.end();
+  const nome = safeName('Pré-minuta – ' + (p.ficha.num ? p.ficha.num + ' – ' : '') + (p.ficha.objeto || tituloProc(p)).slice(0, 60), '.pdf');
+  if(o.como === 'imprimir') return imprimirBytes(bytes, nome);
+  offer(bytes, nome);
+}
+
+/* ===== q_mesa6.js ===== */
+/* =====================================================================
+   Etapa 6 — Mesa de PDF ampliada (sem OCR)
+   + da cápsula aberta (só na Mesa de PDF): Reordenar · Tirar · Separar · Juntar ·
+   Foto → PDF · Buscar texto · Copiar o texto da folha · Dividir para enviar.
+   Camada de texto nas folhas de PDF: segurar e arrastar seleciona; Copiar e Marca-texto
+   (com comentário) como no texto; a marca vai para o arquivo só com "com marcações".
+   Aviso e limite para arquivos acima de 100 MB; "aguarde" com andamento nas pesadas.
+   ===================================================================== */
+const MB = 1024 * 1024, LIM_GRANDE = 100 * MB;
+Object.assign(I, {
+  ordem:P_('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M15 4h3a2 2 0 0 1 2 2v3M9 20H6a2 2 0 0 1-2-2v-3"/><path d="M18 7l2 2 2-2M6 17l-2-2-2 2"/>'),
+  tesoura:P_('<circle cx="6" cy="7" r="2.6"/><circle cx="6" cy="17" r="2.6"/><path d="M8.2 8.4 20 17M8.2 15.6 20 7"/>'),
+  juntar:P_('<rect x="3" y="4" width="8" height="11" rx="1.5"/><rect x="13" y="4" width="8" height="11" rx="1.5"/><path d="M7 18v2h10v-2M12 15v5"/>'),
+  fotoPdf:P_('<path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>'),
+  dividir:P_('<rect x="5" y="3" width="14" height="7" rx="1.5"/><rect x="5" y="14" width="14" height="7" rx="1.5"/><path d="M3 12h2M9 12h2M13 12h2M19 12h2"/>'),
+  galeria:P_('<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/>'),
+  textoPg:P_('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4.5"/>')
+});
+const mbTxt = n => n < MB ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / MB < 10 ? (Math.round(n / MB * 10) / 10) : Math.round(n / MB)).toString().replace('.', ',') + ' MB';
+
+/* ---------- o + da cápsula aberta ---------- */
+(function(){
+  const bot = $('aBot'), grade = bot.querySelector('.capGrade'); if(!grade) return;
+  const b = h('button', { class:'capMais', 'aria-label':'Mais ferramentas de PDF', html:I.plusBold });
+  b.addEventListener('click', ev => { ev.stopPropagation(); if(!M.editing) menuMesaMais(b); });
+  grade.append(b);
+})();
+function menuMesaMais(ancora){
+  if(!M.p) return;
+  popMenu(ancora, [
+    { t:'Reordenar páginas', sub:'segurar e arrastar', ic:'ordem', fn:() => organizar('ordem') },
+    { t:'Tirar páginas', sub:'marque as que saem', ic:'trash', fn:() => organizar('tirar') },
+    { t:'Separar páginas', sub:'as marcadas viram outro arquivo', ic:'tesoura', fn:() => organizar('separar') },
+    { t:'Juntar arquivos', sub:'os da mesa num arquivo só', ic:'juntar', fn:() => juntarSheet() },
+    '-',
+    { t:'Foto → PDF', sub:'várias fotos num PDF só', ic:'fotoPdf', fn:() => fotoPdfSheet() },
+    { t:'Buscar texto', sub:'em PDF que tem texto', ic:'search', fn:() => buscaAbrir() },
+    { t:'Copiar o texto desta folha', sub:'ou segure no texto para escolher', ic:'textoPg', fn:() => copiarTextoFolha() },
+    '-',
+    { t:'Dividir para enviar', sub:'partes que cabem no limite', ic:'dividir', fn:() => dividirSheet() }
+  ], { chave:'mesaMais' });
+}
+
+/* =====================================================================
+   Texto das folhas de PDF (pdf.js), com cache
+   ===================================================================== */
+const TXC = new Map();
+function textoDaPagina(d, e){
+  if(!d || !e || e.s < 0 || !temPdfjs()) return Promise.resolve({ its:[] });
+  const k = d.fileId + ':' + e.s;
+  if(!TXC.has(k)){
+    TXC.set(k, (async () => {
+      const bytes = await bytesDe(d.fileId); if(!bytes) return { its:[] };
+      const pdf = await getPdf(d.fileId, bytes), pg = await pdf.getPage(e.s + 1);
+      const tc = await pg.getTextContent();
+      return { its:tc.items.filter(it => typeof it.str === 'string').map(it => ({ s:it.str, t:it.transform, w:it.width, h:it.height, eol:!!it.hasEOL })) };
+    })().catch(err => { console.warn('texto do pdf', err); TXC.delete(k); return { its:[] }; }));
+    while(TXC.size > 600) TXC.delete(TXC.keys().next().value);
+  }
+  return TXC.get(k);
+}
+async function vpDaFolha(d, e, cssW){
+  const bytes = await bytesDe(d.fileId); if(!bytes) return null;
+  const pdf = await getPdf(d.fileId, bytes), pg = await pdf.getPage(e.s + 1);
+  const rot = ((pg.rotate + (e.r || 0)) % 360 + 360) % 360, v1 = pg.getViewport({ scale:1, rotation:rot });
+  return pg.getViewport({ scale:cssW / v1.width, rotation:rot });
+}
+const pgElDe = (d, e) => pagesEl.querySelector('.page.pdf[data-doc="' + d.id + '"][data-i="' + d.pl.indexOf(e) + '"]');
+/* chamado por desenharPg (f_mesa) depois de desenhar cada folha de PDF */
+async function aposDesenharPdf(pg, pdf, e, w){
+  if(e.s < 0){ pg._vp = null; pg.querySelectorAll('.tlay,.pmkL,.bHitL').forEach(x => x.remove()); return; }
+  const d = docById(pg.dataset.doc); if(!d) return;
+  const page = await pdf.getPage(e.s + 1);
+  const rot = ((page.rotate + (e.r || 0)) % 360 + 360) % 360, v1 = page.getViewport({ scale:1, rotation:rot });
+  pg._vp = page.getViewport({ scale:w / v1.width, rotation:rot });
+  const { its } = await textoDaPagina(d, e);
+  if(!pg.isConnected) return;
+  montarCamada(pg, pg._vp, its);
+  pintarMarcas(pg); pintarHits(pg);
+}
+const MED = document.createElement('canvas').getContext('2d');
+function montarCamada(pg, vp, its){
+  pg.querySelectorAll('.tlay').forEach(x => x.remove());
+  if(!its.some(it => it.s.trim())) return;
+  const lay = h('div', { class:'tlay' }), U = pdfjsLib.Util, frag = document.createDocumentFragment();
+  for(const it of its){
+    if(it.s){
+      const tx = U.transform(vp.transform, it.t), fh = Math.hypot(tx[2], tx[3]);
+      if(fh >= 1){
+        const ang = Math.atan2(tx[1], tx[0]), asc = 0.8;
+        const sp = document.createElement('span'); sp.textContent = it.s;
+        sp.style.left = (tx[4] + asc * fh * Math.sin(ang)) + 'px'; sp.style.top = (tx[5] - asc * fh * Math.cos(ang)) + 'px'; sp.style.fontSize = fh + 'px';
+        MED.font = fh + 'px sans-serif';
+        const nat = MED.measureText(it.s).width, alvo = Math.abs(it.w) * vp.scale, sx = nat > 0 && alvo > 0 ? alvo / nat : 1;
+        let tf = ''; if(Math.abs(ang) > 0.001) tf += 'rotate(' + ang + 'rad) '; if(Math.abs(sx - 1) > 0.01) tf += 'scaleX(' + sx + ')';
+        if(tf) sp.style.transform = tf;
+        frag.append(sp);
+      }
+    }
+    if(it.eol) frag.append(document.createElement('br'));
+  }
+  lay.append(frag); pg.append(lay);
+}
+
+/* ---------- selecionar texto no PDF: Copiar e Marca-texto ---------- */
+const elDe = n => n && (n.nodeType === 1 ? n : n.parentElement);
+function rangePdf(){
+  const s = window.getSelection(); if(!s || !s.rangeCount || s.isCollapsed) return null;
+  const r = s.getRangeAt(0), a = elDe(r.startContainer), b = elDe(r.endContainer);
+  if(!(a && a.closest('.tlay')) && !(b && b.closest('.tlay'))) return null;
+  return r;
+}
+let _selPdfT = 0;
+document.addEventListener('selectionchange', () => { clearTimeout(_selPdfT); _selPdfT = setTimeout(() => { if(rangePdf()) mostrarAcoesPdf(); }, 260); });
+function mostrarAcoesPdf(){
+  esconderAcoes();
+  const r = rangePdf(); if(!r) return;
+  const box = h('div', { id:'selAcoes', class:'pdfA' },
+    h('button', { class:'saB', onclick:() => { const t = textoDaSelPdf(); if(t) copiarTexto(t, 'Trecho copiado.'); limparSelPdf(); } }, h('i', { html:I.copy }), 'Copiar'),
+    h('button', { class:'saB mt', onclick:() => marcarPdf() }, h('i', { html:I.highlighter }), 'Marca-texto'));
+  box.addEventListener('pointerdown', ev => ev.preventDefault());
+  document.body.append(box);
+  posAcoes();
+}
+function textoDaSelPdf(){ const s = window.getSelection(); return s ? s.toString().replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim() : ''; }
+function limparSelPdf(){ const s = window.getSelection(); if(s) s.removeAllRanges(); esconderAcoes(); }
+function marcarPdf(){
+  const r = rangePdf(); if(!r) return;
+  const rects = Array.from(r.getClientRects()).filter(q => q.width > 1 && q.height > 1);
+  const porPg = new Map();
+  pagesEl.querySelectorAll('.page.pdf').forEach(pg => {
+    if(!pg._vp) return;
+    const b = pg.getBoundingClientRect();
+    rects.forEach(q => {
+      const cx = q.left + q.width / 2, cy = q.top + q.height / 2;
+      if(cx < b.left || cx > b.right || cy < b.top || cy > b.bottom) return;
+      if(!porPg.has(pg)) porPg.set(pg, { b, l:[] });
+      porPg.get(pg).l.push(q);
+    });
+  });
+  if(!porPg.size) return limparSelPdf();
+  histPush('marca-texto');
+  porPg.forEach(({ b, l }, pg) => {
+    const d = docById(pg.dataset.doc), e = d && d.pl[+pg.dataset.i]; if(!e) return;
+    const vp = pg._vp, k = b.width / (pg.clientWidth || b.width);
+    const rs = unirRetas(l.map(q => {
+      const p1 = vp.convertToPdfPoint((q.left - b.left) / k, (q.top - b.top) / k), p2 = vp.convertToPdfPoint((q.right - b.left) / k, (q.bottom - b.top) / k);
+      return [Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1]), Math.max(p1[0], p2[0]), Math.max(p1[1], p2[1])].map(v => Math.round(v * 10) / 10);
+    }));
+    (e.mk = e.mk || []).push({ id:uid(), r:rs });
+    pintarMarcas(pg);
+  });
+  limparSelPdf(); touch(M.p); saveDB();
+  toast('Marcado. Toque no trecho para escrever um comentário.', { ms:2200 });
+}
+/* junta os pedacinhos de uma mesma linha num retângulo só */
+function unirRetas(l){
+  l = l.slice().sort((a, b) => (b[3] - a[3]) || (a[0] - b[0]));
+  const out = [];
+  for(const r of l){
+    const u = out.find(o => Math.abs(o[1] - r[1]) < (r[3] - r[1]) * 0.5 && Math.abs(o[3] - r[3]) < (r[3] - r[1]) * 0.5 && r[0] <= o[2] + (r[3] - r[1]) * 1.2 && r[2] >= o[0] - (r[3] - r[1]) * 1.2);
+    if(u){ u[0] = Math.min(u[0], r[0]); u[1] = Math.min(u[1], r[1]); u[2] = Math.max(u[2], r[2]); u[3] = Math.max(u[3], r[3]); }
+    else out.push(r.slice());
+  }
+  return out;
+}
+function retaNaTela(vp, r){ const v = vp.convertToViewportRectangle(r); return { x:Math.min(v[0], v[2]), y:Math.min(v[1], v[3]), w:Math.abs(v[2] - v[0]), h:Math.abs(v[3] - v[1]) }; }
+function pintarMarcas(pg){
+  pg.querySelectorAll('.pmkL').forEach(x => x.remove());
+  const d = docById(pg.dataset.doc), e = d && d.pl[+pg.dataset.i];
+  if(!e || !e.mk || !e.mk.length || !pg._vp) return;
+  const lay = h('div', { class:'pmkL' });
+  e.mk.forEach(m => m.r.forEach(r => {
+    const q = retaNaTela(pg._vp, r);
+    const el = h('div', { class:'pmk' + (m.c ? ' com' : ''), dataset:{ mk:m.id }, style:{ left:q.x + 'px', top:q.y + 'px', width:q.w + 'px', height:q.h + 'px' } });
+    el.addEventListener('click', ev => { ev.stopPropagation(); if(M.fsel || M.editing) return; abrirComentarioPdf(pg, e, m, el); });
+    lay.append(el);
+  }));
+  pg.append(lay);
+}
+function abrirComentarioPdf(pg, e, m, el){
+  fecharComentario();
+  const txa = h('textarea', { class:'txa', rows:'3', placeholder:'Comentário (pode ficar vazio)' }); txa.value = m.c || '';
+  const guardar = () => { const v = txa.value.trim(); if((m.c || '') === v) return; if(v) m.c = v; else delete m.c; touch(M.p); saveDB(); pintarMarcas(pg); };
+  const box = h('div', { id:'mtCom' }, h('b', null, 'Comentário'), txa,
+    h('div', { class:'row' },
+      h('button', { class:'btn sm ghost danger', onclick:() => { histPush('marca-texto'); fecharComentario(true); e.mk = e.mk.filter(x => x !== m); if(!e.mk.length) delete e.mk; touch(M.p); saveDB(); pintarMarcas(pg); } }, 'Tirar marca'),
+      h('button', { class:'btn sm acc', onclick:() => fecharComentario() }, 'Pronto')));
+  box._guardar = guardar;
+  document.body.append(box);
+  const r = el.getBoundingClientRect(), W = window.innerWidth, bw = Math.min(320, W - 24);
+  box.style.width = bw + 'px'; box.style.left = Math.max(12, Math.min(W - bw - 12, r.left)) + 'px';
+  const bh = box.offsetHeight, dr = docEl.getBoundingClientRect();
+  box.style.top = (r.bottom + 10 + bh < dr.bottom - 70 ? r.bottom + 10 : Math.max(dr.top + 6, r.top - bh - 10)) + 'px';
+  setTimeout(() => document.addEventListener('pointerdown', foraComentario, true), 0);
+}
+const temMarcasPdf = l => l.some(f => f.e && !f.e.d && f.e.mk && f.e.mk.length);
+/* no arquivo: o marca-texto sai por cima do texto, no mesmo tom da tela */
+function desenharMarcas(out, pares){
+  const cor = PDFLib.rgb(0.933, 0.957, 0.737), bm = PDFLib.BlendMode && PDFLib.BlendMode.Multiply;
+  pares.forEach(([i, e]) => {
+    if(!e || !e.mk || !e.mk.length || i >= out.getPageCount()) return;
+    const page = out.getPage(i);
+    e.mk.forEach(m => m.r.forEach(r => {
+      const o = { x:r[0], y:r[1], width:r[2] - r[0], height:r[3] - r[1], color:cor, opacity:bm ? 1 : 0.55 };
+      if(bm) o.blendMode = bm;
+      page.drawRectangle(o);
+    }));
+  });
+}
+
+/* ---------- copiar o texto da folha que está na tela ---------- */
+async function copiarTextoFolha(){
+  const f = PGI.on ? PGI.lista[PGI.i] : folhaAtual(); if(!f) return toast('Nenhuma folha na tela.');
+  if(!f.e){ const b = f.d && bodyDoDoc(f.d); return b ? copiarTexto(b.innerText.trim(), 'Texto do documento copiado.') : null; }
+  if(!temPdfjs()) return toast('O leitor de PDF ainda está carregando.');
+  const { its } = await textoDaPagina(f.d, f.e);
+  const t = its.map(it => it.s + (it.eol ? '\n' : '')).join('').replace(/[ \t]+\n/g, '\n').trim();
+  if(!t) return toast('Esta folha não tem texto (é imagem). O reconhecimento de texto (OCR) fica para a próxima etapa.', { ms:4500 });
+  copiarTexto(t, 'Texto da folha ' + f.fl + ' copiado.');
+}
+
+/* =====================================================================
+   Buscar texto (textos e PDFs da mesa): todas as ocorrências, ▲ ▼
+   ===================================================================== */
+const BUSCA = { q:'', hits:[], i:-1, seq:0, bar:null };
+const n1 = c => c.normalize('NFD')[0].toLowerCase();
+const normIgual = s => Array.from(s).map(n1).join('');
+function buscaAbrir(){
+  if(!M.p) return;
+  if(BUSCA.bar){ BUSCA.bar.querySelector('input').focus(); return; }
+  esconderAcoes(); if(CAP.aberta) capsula(false);
+  const inp = h('input', { type:'search', class:'bInp', placeholder:'Buscar nesta mesa', enterkeyhint:'search', autocomplete:'off' });
+  const cont = h('span', { class:'bCont' });
+  const bt = (ic, rot, fn) => h('button', { class:'bBt', 'aria-label':rot, html:I[ic], onclick:fn });
+  const bar = h('div', { id:'buscaBar' }, h('span', { class:'bIc', html:I.search }), inp, cont,
+    bt('chevU', 'Anterior', () => buscaIr(BUSCA.i - 1)), bt('chevD', 'Próxima', () => buscaIr(BUSCA.i + 1)), bt('x', 'Fechar a busca', () => buscaFechar()));
+  bar.addEventListener('pointerdown', ev => { if(!ev.target.closest('input')) ev.preventDefault(); });
+  document.body.append(bar); BUSCA.bar = bar;
+  let t = 0;
+  inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => buscar(inp.value), 380); });
+  inp.addEventListener('keydown', ev => { if(ev.key === 'Enter'){ ev.preventDefault(); clearTimeout(t); if(inp.value.trim() === BUSCA.q && BUSCA.hits.length) buscaIr(BUSCA.i + (ev.shiftKey ? -1 : 1)); else buscar(inp.value); } if(ev.key === 'Escape') buscaFechar(); });
+  setTimeout(() => inp.focus(), 60);
+}
+function buscaFechar(){
+  BUSCA.seq++; BUSCA.q = ''; BUSCA.hits = []; BUSCA.i = -1;
+  if(BUSCA.bar){ BUSCA.bar.remove(); BUSCA.bar = null; }
+  if(window.CSS && CSS.highlights){ CSS.highlights.delete('busca'); CSS.highlights.delete('buscaAt'); }
+  pagesEl.querySelectorAll('.bHitL').forEach(x => x.remove());
+}
+function contBusca(t){ if(BUSCA.bar) BUSCA.bar.querySelector('.bCont').textContent = t; }
+async function buscar(q, manter){
+  q = String(q || '').replace(/\s+/g, ' ').trim();
+  const seq = ++BUSCA.seq, velho = BUSCA.i;
+  BUSCA.q = q; BUSCA.hits = []; BUSCA.i = -1; if(!manter) pintarBusca();
+  if(q.length < 2){ contBusca(''); return; }
+  const alvo = normIgual(q), hits = [], docs = M.p.docs.filter(d => d.linha);
+  const totPg = docs.reduce((n, d) => n + (d.kind === 'pdf' ? vivas(d).length : 0), 0);
+  let feitas = 0;
+  for(const d of docs){
+    if(d.kind === 'texto'){
+      const b = bodyDoDoc(d); if(!b) continue;
+      const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT, SEM_VAO); let tn;
+      while((tn = w.nextNode())){
+        const s = normIgual(tn.data); let i = s.indexOf(alvo);
+        while(i >= 0){ const r = document.createRange(); r.setStart(tn, i); r.setEnd(tn, i + alvo.length); hits.push({ tipo:'txt', d, r }); i = s.indexOf(alvo, i + alvo.length); }
+      }
+    } else if(d.kind === 'pdf'){
+      for(const e of d.pl){
+        if(e.d || e.s < 0) continue;
+        const { its } = await textoDaPagina(d, e); if(seq !== BUSCA.seq) return;
+        feitas++; if(totPg > 15 && feitas % 5 === 0) contBusca('folha ' + feitas + ' de ' + totPg + '…');
+        acharNaPagina(its, alvo).forEach(rs => hits.push({ tipo:'pdf', d, e, rs }));
+      }
+    }
+  }
+  if(seq !== BUSCA.seq) return;
+  BUSCA.hits = hits;
+  if(manter){ BUSCA.i = hits.length ? Math.min(Math.max(velho, 0), hits.length - 1) : -1; contBusca(hits.length ? (BUSCA.i + 1) + ' de ' + hits.length : 'nada'); pintarBusca(); return; }
+  if(!hits.length){ contBusca('nada'); pintarBusca(); toast(totPg && !docs.some(d => d.kind === 'texto') ? 'Não achei “' + q + '”. Se o PDF for escaneado (imagem), a busca só vai funcionar com o OCR.' : 'Não achei “' + q + '”.', { ms:3200 }); return; }
+  buscaIr(0);
+}
+/* acha o trecho no texto da folha; devolve os retângulos (no espaço do PDF) de cada ocorrência */
+function acharNaPagina(its, alvo){
+  const mapa = []; let s = '';
+  its.forEach((it, k) => {
+    const t = normIgual(it.s);
+    for(let j = 0; j < t.length; j++){ mapa.push([k, j]); }
+    s += t;
+    if(it.eol || (it.s && !/\s$/.test(it.s))){ s += ' '; mapa.push([k, -1]); }
+  });
+  const achados = []; let i = s.replace(/\s+/g, m => ' '.repeat(m.length)).indexOf(alvo);
+  const ss = s.replace(/\s+/g, m => ' '.repeat(m.length));
+  while(i >= 0){
+    const partes = new Map();
+    for(let c = i; c < i + alvo.length; c++){ const [k, j] = mapa[c]; if(j < 0) continue; const p = partes.get(k); if(p){ p[1] = j + 1; } else partes.set(k, [j, j + 1]); }
+    const rs = []; partes.forEach(([a, b], k) => rs.push(retaDoItem(its[k], a, b)));
+    if(rs.length) achados.push(rs);
+    i = ss.indexOf(alvo, i + Math.max(1, alvo.length));
+  }
+  return achados;
+}
+function retaDoItem(it, a, b){
+  const t = it.t, n = Math.max(1, it.s.length), sx = Math.hypot(t[0], t[1]) || 1, sy = Math.hypot(t[2], t[3]) || it.h || 10;
+  const ux = t[0] / sx, uy = t[1] / sx, vx = t[2] / sy, vy = t[3] / sy, hh = it.h || sy;
+  const x0 = it.w * a / n, x1 = it.w * b / n, y0 = -0.22 * hh, y1 = 0.9 * hh;
+  const pts = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].map(([x, y]) => [t[4] + ux * x + vx * y, t[5] + uy * x + vy * y]);
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+function pintarBusca(){
+  if(window.CSS && CSS.highlights && window.Highlight){
+    const txt = BUSCA.hits.filter(x => x.tipo === 'txt'), at = BUSCA.hits[BUSCA.i];
+    CSS.highlights.set('busca', new Highlight(...txt.filter(x => x !== at).map(x => x.r)));
+    if(at && at.tipo === 'txt') CSS.highlights.set('buscaAt', new Highlight(at.r)); else CSS.highlights.delete('buscaAt');
+  }
+  pagesEl.querySelectorAll('.page.pdf').forEach(pintarHits);
+}
+function pintarHits(pg){
+  pg.querySelectorAll('.bHitL').forEach(x => x.remove());
+  if(!BUSCA.hits.length || !pg._vp) return;
+  const d = docById(pg.dataset.doc), e = d && d.pl[+pg.dataset.i]; if(!e) return;
+  const meus = BUSCA.hits.filter(x => x.tipo === 'pdf' && x.e === e); if(!meus.length) return;
+  const lay = h('div', { class:'bHitL' }), at = BUSCA.hits[BUSCA.i];
+  meus.forEach(x => x.rs.forEach(r => { const q = retaNaTela(pg._vp, r); lay.append(h('div', { class:'bHit' + (x === at ? ' at' : ''), style:{ left:(q.x - 1) + 'px', top:(q.y - 1) + 'px', width:(q.w + 2) + 'px', height:(q.h + 2) + 'px' } })); }));
+  pg.append(lay);
+}
+async function buscaIr(i){
+  const n = BUSCA.hits.length; if(!n) return;
+  BUSCA.i = ((i % n) + n) % n;
+  const x = BUSCA.hits[BUSCA.i];
+  contBusca((BUSCA.i + 1) + ' de ' + n);
+  pintarBusca();
+  const d0 = docEl.getBoundingClientRect();
+  if(x.tipo === 'txt'){
+    const rc = x.r.getBoundingClientRect(); docEl.scrollTop += rc.top - d0.top - docEl.clientHeight / 3; aoRolar(); return;
+  }
+  const pg = pgElDe(x.d, x.e); if(!pg) return;
+  const vp = pg._vp || await vpDaFolha(x.d, x.e, pg.clientWidth);
+  const y = vp ? retaNaTela(vp, x.rs[0]).y : 0;
+  docEl.scrollTop = Math.max(0, pg.offsetTop + y - docEl.clientHeight / 3); aoRolar();
+}
+
+/* =====================================================================
+   Organizar páginas: reordenar (segurar e arrastar), tirar, separar
+   ===================================================================== */
+function unidadesDaMesa(p){
+  const out = [];
+  p.docs.filter(d => d.linha).forEach(d => {
+    if(d.kind === 'pdf') d.pl.forEach((e, i) => { if(!e.d) out.push({ k:d.id + ':' + i, tipo:'pdf', d, e }); });
+    else out.push({ k:d.id, tipo:'txt', d });
+  });
+  const F = folhas(p); let n = {};
+  out.forEach(u => { const f = F[u.d.id] || { ini:1 }; const j = n[u.d.id] || 0; n[u.d.id] = j + 1; u.fl = f.ini + j; if(u.tipo === 'txt') u.fim = f.fim; });
+  return out;
+}
+function organizar(modo){
+  const p = M.p; if(!p) return;
+  salvarTudo(); if(CAP.aberta) capsula(false); esconderAcoes();
+  const base = unidadesDaMesa(p);
+  if(!base.length) return toast('Inclua um PDF ou uma foto primeiro.');
+  if(modo !== 'ordem' && !base.some(u => u.tipo === 'pdf')) return toast('Não há páginas de PDF na mesa.');
+  const ordem = base.slice(), marc = new Set();
+  const tit = { ordem:'Reordenar páginas', tirar:'Tirar páginas', separar:'Separar páginas' }[modo];
+  const grade = h('div', { class:'orgG' });
+  const dica = h('p', { class:'sgNota orgDica' }, modo === 'ordem' ? 'Segure a página e arraste para o lugar certo.' : 'Toque nas páginas para marcar. Segure e arraste para mudar a ordem.');
+  const todas = modo === 'ordem' ? null : h('button', { class:'btn sm ghost orgTodas', onclick:() => { const ps = ordem.filter(u => u.tipo === 'pdf'); if(ps.every(u => marc.has(u.k))) marc.clear(); else ps.forEach(u => marc.add(u.k)); pintarMarc(); } }, 'Todas');
+  const s = sheet({ titulo:tit, cheio:true, cabExtra:todas, corpo:[dica, grade] });
+  s.el.classList.add('orgSh'); if(modo !== 'ordem') s.el.classList.add('marca');
+  const cards = new Map();
+  const card = u => {
+    if(cards.has(u.k)) return cards.get(u.k);
+    const cv = u.tipo === 'pdf' ? h('canvas') : null;
+    const ratio = u.tipo === 'pdf' ? (() => { const [w, hh] = tamanhoPagina(u.d, u.e); return w + ' / ' + hh; })() : '210 / 297';
+    const c = h('div', { class:'orgC' + (u.tipo === 'txt' ? ' txt' : ''), dataset:{ k:u.k } },
+      h('div', { class:'orgF', style:{ aspectRatio:ratio } }, cv || h('span', { class:'orgT' }, h('b', null, 'Texto'), u.d.nome), h('i', { class:'orgV', html:I.check })),
+      h('small', null, u.tipo === 'txt' ? (u.fim > u.fl ? 'fls. ' + u.fl + '–' + u.fim : 'fls. ' + u.fl) : 'fls. ' + u.fl));
+    c._u = u; c._cv = cv; cards.set(u.k, c); return c;
+  };
+  const pintar = () => { grade.replaceChildren(...ordem.map(card)); pintarMarc(); };
+  const pintarMarc = () => {
+    cards.forEach((c, k) => c.classList.toggle('on', marc.has(k)));
+    if(todas){ const ps = ordem.filter(u => u.tipo === 'pdf'); todas.textContent = ps.length && ps.every(u => marc.has(u.k)) ? 'Nenhuma' : 'Todas'; }
+    rodape();
+  };
+  const mudou = () => ordem.map(u => u.k).join('|') !== base.map(u => u.k).join('|');
+  const rodape = () => {
+    const n = marc.size;
+    if(modo === 'ordem') s.rodape([{ t:'Cancelar', v:'ghost' }, { t:'Pronto', v:'acc', fn:() => { if(mudou()){ histPush('reordenar'); aplicarOrdem(p, ordem); depoisDeMudar('Páginas na nova ordem.'); } } }]);
+    else if(modo === 'tirar') s.rodape([{ t:'Cancelar', v:'ghost' }, { t:n ? 'Tirar ' + plural(n, 'página', 'páginas') : 'Marque as páginas', v:'acc', disabled:!n, fn:() => tirarPaginas(p, ordem, marc, mudou()) }]);
+    else s.rodape([{ t:'Cancelar', v:'ghost' }, { t:n ? 'Separar ' + plural(n, 'página', 'páginas') : 'Marque as páginas', v:'acc', disabled:!n, fn:() => { separarPaginas(p, ordem, marc, mudou()); } }]);
+  };
+  pintar();
+  miniaturas(ordem.map(card), s);
+  /* tocar marca; segurar e arrastar muda a ordem */
+  let pr = null;
+  const achar = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest && el.closest('.orgC'); };
+  grade.addEventListener('pointerdown', ev => {
+    const c = ev.target.closest('.orgC'); if(!c || ev.button > 0) return;
+    pr = { c, x:ev.clientX, y:ev.clientY, id:ev.pointerId, arr:false };
+    pr.t = setTimeout(() => {
+      if(!pr) return;
+      pr.arr = true; c.classList.add('ph');
+      const r = c.getBoundingClientRect();
+      pr.g = c.cloneNode(true); pr.g.classList.add('orgGhost'); pr.g.classList.remove('ph');
+      const gc = pr.g.querySelector('canvas'); if(gc && c._cv){ gc.width = c._cv.width; gc.height = c._cv.height; gc.getContext('2d').drawImage(c._cv, 0, 0); }
+      Object.assign(pr.g.style, { width:r.width + 'px', left:r.left + 'px', top:r.top + 'px' });
+      pr.dx = pr.x - r.left; pr.dy = pr.y - r.top;
+      document.body.append(pr.g);
+      if(navigator.vibrate) try{ navigator.vibrate(15); }catch(e){}
+    }, 320);
+  });
+  grade.addEventListener('touchmove', ev => { if(pr && pr.arr) ev.preventDefault(); }, { passive:false });
+  window.addEventListener('pointermove', mover);
+  function mover(ev){
+    if(!pr || ev.pointerId !== pr.id) return;
+    if(!pr.arr){ if(Math.hypot(ev.clientX - pr.x, ev.clientY - pr.y) > 10){ clearTimeout(pr.t); pr = null; } return; }
+    ev.preventDefault();
+    pr.g.style.left = (ev.clientX - pr.dx) + 'px'; pr.g.style.top = (ev.clientY - pr.dy) + 'px';
+    const sc = s.corpo, sr = sc.getBoundingClientRect();
+    if(ev.clientY < sr.top + 50) sc.scrollTop -= 12; else if(ev.clientY > sr.bottom - 50) sc.scrollTop += 12;
+    pr.g.style.visibility = 'hidden'; const alvo = achar(ev.clientX, ev.clientY); pr.g.style.visibility = '';
+    if(!alvo || alvo === pr.c || !grade.contains(alvo)) return;
+    const i = ordem.indexOf(pr.c._u), j = ordem.indexOf(alvo._u); if(i < 0 || j < 0) return;
+    ordem.splice(i, 1); ordem.splice(j, 0, pr.c._u);
+    grade.insertBefore(pr.c, j > i ? alvo.nextSibling : alvo);
+  }
+  const soltar = ev => {
+    if(!pr || (ev && ev.pointerId !== pr.id)) return;
+    clearTimeout(pr.t);
+    const d = pr; pr = null;
+    if(d.arr){ d.c.classList.remove('ph'); if(d.g) d.g.remove(); d.c._solto = Date.now(); rodape(); return; }
+  };
+  window.addEventListener('pointerup', soltar); window.addEventListener('pointercancel', soltar);
+  grade.addEventListener('click', ev => {
+    const c = ev.target.closest('.orgC'); if(!c || (c._solto && Date.now() - c._solto < 400)) return;
+    if(modo === 'ordem') return;
+    if(c._u.tipo !== 'pdf') return toast('Texto não se tira por aqui: apague o documento na lista do processo.', { ms:2600 });
+    marc.has(c._u.k) ? marc.delete(c._u.k) : marc.add(c._u.k); pintarMarc();
+  });
+  const fecharOrig = s.fechar;
+  s.fechar = v => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); window.removeEventListener('pointercancel', soltar); s._parar = true; fecharOrig(v); };
+}
+async function miniaturas(cs, s){
+  const larg = Math.max(80, Math.round((s.corpo.clientWidth - 56) / 3));
+  for(const c of cs){
+    if(s._parar || s.fechado) return;
+    if(!c._cv) continue;
+    try{
+      const u = c._u, bytes = u.e.s < 0 ? null : await bytesDe(u.d.fileId);
+      const pdf = bytes ? await getPdf(u.d.fileId, bytes) : null;
+      await desenharPaginaPdf(c._cv, pdf, u.e, larg);
+    }catch(e){ console.warn('miniatura', e); }
+    await sleep(0);
+  }
+}
+/* monta p.docs na ordem escolhida; um arquivo que ficou em pedaços vira "(cont.)" nos pedaços seguintes */
+function aplicarOrdem(p, ordem){
+  const fora = p.docs.filter(d => !d.linha), semPg = p.docs.filter(d => d.linha && d.kind === 'pdf' && !vivas(d).length);
+  const novos = [], usado = new Set(); let run = null;
+  for(const u of ordem){
+    if(u.tipo === 'txt'){ run = null; novos.push(u.d); continue; }
+    if(run && run.orig === u.d){ run.doc.pl.push(u.e); continue; }
+    let doc;
+    if(!usado.has(u.d)){ usado.add(u.d); doc = u.d; doc.pl = doc.pl.filter(e => e.d); doc._ini = true; }
+    else { doc = Object.assign(clone(Object.assign({}, u.d, { pl:[] })), { id:uid(), nome:u.d.nome.replace(/ \(cont\.\)$/, '') + ' (cont.)', pl:[] }); }
+    run = { orig:u.d, doc }; doc.pl.push(u.e); novos.push(doc);
+  }
+  /* páginas retiradas continuam guardadas no fim do arquivo original (para Restaurar) */
+  novos.forEach(d => { if(d._ini){ const tiradas = d.pl.filter(e => e.d), vivos = d.pl.filter(e => !e.d); d.pl = vivos.concat(tiradas); delete d._ini; } });
+  p.docs = novos.concat(semPg.filter(d => !novos.includes(d)), fora);
+  touch(p);
+}
+function tirarPaginas(p, ordem, marc, mudou){
+  histPush('tirar páginas');
+  if(mudou) aplicarOrdem(p, ordem);
+  const l = ordem.filter(u => marc.has(u.k));
+  l.forEach(u => { u.e.d = true; });
+  depoisDeMudar();
+  toast(plural(l.length, 'página tirada', 'páginas tiradas') + '.', { acao:'Desfazer', fn:() => desfazer(), ms:5000 });
+}
+async function separarPaginas(p, ordem, marc, mudou){
+  const l = ordem.filter(u => marc.has(u.k)); if(!l.length) return;
+  const op = await escolher('O que fazer com ' + plural(l.length, 'a página marcada', 'as ' + l.length + ' páginas marcadas'), [
+    ['enviar', 'Salvar ou compartilhar só essas páginas', 'um PDF à parte, com carimbo e número como na mesa'],
+    ['arquivo', 'Virar um arquivo à parte, aqui na mesa', 'saem do arquivo de origem e ficam logo depois dele'],
+    ['processo', 'Incluir num processo', 'entram como documento do processo escolhido']], null);
+  if(!op) return;
+  const es = new Set(l.map(u => u.e));
+  if(op === 'arquivo'){
+    histPush('separar páginas');
+    if(mudou) aplicarOrdem(p, ordem);
+    const porDoc = new Map(); l.forEach(u => { const d = p.docs.find(x => x.kind === 'pdf' && x.pl.includes(u.e)); if(!d) return; if(!porDoc.has(d)) porDoc.set(d, []); porDoc.get(d).push(u.e); });
+    let n = 0;
+    porDoc.forEach((lista, d) => {
+      const novo = Object.assign(clone(d), { id:uid(), nome:d.nome.replace(/ \((separado|cont\.)\)$/, '') + ' (separado)', pl:lista.map(e => clone(e)), pai:null });
+      lista.forEach(e => { e.d = true; delete e.mk; });
+      p.docs.splice(p.docs.indexOf(d) + 1, 0, novo); n++;
+    });
+    depoisDeMudar(n === 1 ? 'Páginas separadas num arquivo à parte.' : n + ' arquivos separados.');
+    return;
+  }
+  if(mudou){ histPush('reordenar'); aplicarOrdem(p, ordem); depoisDeMudar(); }
+  const fs = folhasTela().filter(f => f.e && es.has(f.e));
+  if(op === 'enviar') return exportarFolhas(fs, 'compartilhar');
+  pdfIncluirEmProcesso(fs);
+}
+
+/* ---------- juntar os arquivos da mesa ---------- */
+function juntarSheet(){
+  const p = M.p; if(!p) return;
+  salvarTudo(); if(CAP.aberta) capsula(false);
+  const ds = p.docs.filter(d => d.linha && d.kind === 'pdf' && vivas(d).length);
+  if(ds.length < 2) return toast('Para juntar, a mesa precisa ter pelo menos dois arquivos de PDF.');
+  const boxes = ds.map(() => h('input', { type:'checkbox', checked:true }));
+  const nome = h('input', { class:'inp', value:'PDF juntado ' + dataBR(hojeISO()).replace(/\//g, '-') });
+  const s = sheet({ titulo:'Juntar arquivos', corpo:[
+    h('div', { class:'sgGrp' }, ds.map((d, i) => h('label', { class:'sgRow' }, h('span', { class:'grow', style:{ overflowWrap:'anywhere' } }, d.nome, h('small', { class:'muted', style:{ display:'block' } }, plural(vivas(d).length, 'página', 'páginas'))), boxes[i]))),
+    h('div', { class:'sgGrp', style:{ padding:'10px' } }, h('label', { class:'fld' }, h('span', null, 'Nome do arquivo novo'), nome)),
+    h('p', { class:'sgNota' }, 'Os marcados viram um arquivo só, na ordem da mesa, no lugar do primeiro. Dá para desfazer.')],
+    botoes:[{ t:'Cancelar', v:'ghost' }, { t:'Juntar', v:'acc', fn:async () => {
+      const esc = ds.filter((_, i) => boxes[i].checked);
+      if(esc.length < 2){ toast('Marque pelo menos dois arquivos.'); return false; }
+      await juntarArquivos(p, esc, nome.value.trim() || 'PDF juntado');
+    } }] });
+  return s;
+}
+async function juntarArquivos(p, esc, nome){
+  if(!precisaLibs()) return;
+  const set = new Set(esc), l = folhasTela().filter(f => f.e && set.has(f.d));
+  const tot = esc.reduce((n, d) => n + vivas(d).length, 0);
+  const b = busy('Juntando ' + plural(tot, 'página', 'páginas') + '… aguarde');
+  try{
+    histPush('juntar');
+    const bytes = await pdfDasFolhas(l, {});
+    const d = await novoDocPdf(p, nome, bytes, 'linha');
+    d.pl.forEach((e, i) => { const o = l[i] && l[i].e; if(o && o.mk && o.mk.length) e.mk = clone(o.mk); });
+    p.docs = p.docs.filter(x => x !== d);
+    const i = p.docs.indexOf(esc[0]); p.docs.splice(i < 0 ? p.docs.length : i, 0, d);
+    p.docs = p.docs.filter(x => !set.has(x));
+    b.end();
+    depoisDeMudar('Arquivos juntados: ' + d.nome + '.');
+    irParaDoc(d.id);
+  }catch(e){ b.end(); console.error(e); toast('Não foi possível juntar: ' + (e.message || e)); }
+}
+
+/* ---------- Foto → PDF: várias fotos num PDF só (com a imagem reduzida) ---------- */
+function fotoPdfSheet(){
+  if(!M.p) return;
+  if(CAP.aberta) capsula(false);
+  const fotos = [];
+  const lista = h('div', { class:'fpL' }), nome = h('input', { class:'inp', value:'Fotos ' + dataBR(hojeISO()).replace(/\//g, '-') });
+  const cam = h('input', { type:'file', accept:'image/*', capture:'environment', class:'arqIn' }), gal = h('input', { type:'file', accept:'image/*', multiple:true, class:'arqIn' });
+  const receber = async fs => {
+    for(const f of fs){ if(!/^image\//.test(f.type || '') && !RX_IMG.test(f.name || '')) continue; fotos.push({ f, url:URL.createObjectURL(f) }); }
+    pintar();
+  };
+  cam.onchange = () => { const l = Array.from(cam.files || []); cam.value = ''; receber(l); };
+  gal.onchange = () => { const l = Array.from(gal.files || []); gal.value = ''; receber(l); };
+  const pintar = () => {
+    lista.replaceChildren(...fotos.map((x, i) => h('div', { class:'fpC' }, h('img', { src:x.url, alt:'' }), h('small', null, String(i + 1)),
+      h('button', { class:'fpX', 'aria-label':'Tirar esta foto', html:I.x, onclick:() => { URL.revokeObjectURL(x.url); fotos.splice(i, 1); pintar(); } }))));
+    lista.hidden = !fotos.length;
+    s.rodape([{ t:'Cancelar', v:'ghost' }, { t:fotos.length ? 'Fazer o PDF (' + plural(fotos.length, 'foto', 'fotos') + ')' : 'Tire ou escolha as fotos', v:'acc', disabled:!fotos.length, fn:async () => { await fotosParaPdf(fotos.map(x => x.f), nome.value.trim() || 'Fotos'); } }]);
+  };
+  const s = sheet({ titulo:'Foto → PDF', corpo:[
+    h('div', { class:'row', style:{ gap:'10px' } },
+      h('button', { class:'btn grow', onclick:() => cam.click() }, h('span', { html:I.camera }), 'Tirar foto'),
+      h('button', { class:'btn grow', onclick:() => gal.click() }, h('span', { html:I.galeria }), 'Da galeria')),
+    lista,
+    h('div', { class:'sgGrp', style:{ padding:'10px' } }, h('label', { class:'fld' }, h('span', null, 'Nome do PDF'), nome)),
+    h('p', { class:'sgNota' }, 'Cada foto vira uma folha A4, na ordem acima. As fotos são reduzidas para o PDF ficar leve (bom para enviar).'),
+    cam, gal],
+    aoFechar:() => fotos.forEach(x => URL.revokeObjectURL(x.url)) });
+  pintar();
+}
+async function fotoReduzida(file){
+  let bmp;
+  try{ bmp = await createImageBitmap(file, { imageOrientation:'from-image' }); }catch(e){ bmp = await createImageBitmap(file); }
+  const max = 2000, k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+  if(bmp.close) bmp.close();
+  const b = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.82));
+  return { bytes:new Uint8Array(await b.arrayBuffer()), w:cv.width, h:cv.height };
+}
+async function fotosParaPdf(files, nome){
+  if(!precisaLibs()) return;
+  const p = M.p, b = busy('Preparando as fotos… aguarde');
+  try{
+    const pdf = await PDFLib.PDFDocument.create();
+    for(let i = 0; i < files.length; i++){
+      b.txt('Foto ' + (i + 1) + ' de ' + files.length + '…');
+      const im = await fotoReduzida(files[i]), img = await pdf.embedJpg(im.bytes);
+      const G = im.w > im.h ? PAG.paisagem : PAG.retrato, page = pdf.addPage([G.W, G.H]);
+      const m = 20, k = Math.min((G.W - 2 * m) / im.w, (G.H - 2 * m) / im.h);
+      page.drawImage(img, { x:(G.W - im.w * k) / 2, y:(G.H - im.h * k) / 2, width:im.w * k, height:im.h * k });
+      await sleep(0);
+    }
+    pdf.setTitle(nome); pdf.setCreator('Panda'); pdf.setProducer('Panda');
+    const bytes = new Uint8Array(await pdf.save());
+    salvarTudo(); histPush('foto → PDF');
+    const d = await novoDocPdf(p, nome, bytes, 'linha');
+    const aqui = M.cur && M.cur.d && p.docs.includes(M.cur.d) ? M.cur.d : null;
+    if(aqui){ p.docs = p.docs.filter(x => x !== d); p.docs.splice(p.docs.indexOf(aqui) + 1, 0, d); }
+    b.end(); touch(p); saveDB(true);
+    renderMesa(true); irParaDoc(d.id);
+    toast('PDF feito com ' + plural(files.length, 'foto', 'fotos') + ' (' + mbTxt(bytes.length) + ').');
+  }catch(e){ b.end(); console.error(e); toast('Não foi possível fazer o PDF: ' + (e.message || e)); }
+}
+
+/* =====================================================================
+   Dividir para enviar: partes que cabem no limite (numeração continua)
+   ===================================================================== */
+const LIMITES = [[25, 'E-mail (Gmail, Outlook)', 'partes de até 25 MB'], [10, 'Sistemas e e-mails menores', 'partes de até 10 MB'], [5, 'Bem pequeno', 'partes de até 5 MB'], [100, 'Arquivo grande', 'partes de até 100 MB']];
+async function dividirSheet(lista){
+  const p = M.p; if(!p) return;
+  salvarTudo(); if(CAP.aberta) capsula(false);
+  const l = Array.isArray(lista) && lista.length ? lista : folhasTela(); if(!l.length) return toast('Inclua um PDF ou uma foto primeiro.');
+  const ult = settings.limEnvio || 25;
+  const op = await escolher('Dividir para enviar', LIMITES.map(([n, t, sub]) => [String(n), t, sub]).concat([['outro', 'Outro tamanho', 'você diz quantos MB']]), LIMITES.some(x => x[0] === ult) ? String(ult) : 'outro');
+  if(!op) return;
+  let lim = parseFloat(op);
+  if(op === 'outro'){
+    const v = await perguntar('Limite de cada parte', 'Tamanho máximo, em MB', String(ult).replace('.', ','), 'Dividir', { dica:'Exemplo: 20 ou 7,5' });
+    lim = parseFloat(String(v || '').replace(',', '.'));
+    if(!(lim > 0.2)) return;
+  }
+  settings.limEnvio = lim; saveSettings();
+  await dividirFolhas(l, lim * MB);
+}
+async function dividirFolhas(l, lim){
+  if(!precisaLibs()) return;
+  const o = optCarimbo(), base = safeName(M.p.avulsa ? (Array.from(new Set(l.map(f => f.d)))[0].nome || 'Documentos') : tituloProc(M.p), '').replace(/\.$/, '');
+  const b = busy('Medindo o PDF… aguarde');
+  try{
+    const monta = sub => pdfDasFolhas(sub, Object.assign({ titulo:base }, o));
+    const inteiro = await monta(l);
+    if(inteiro.length <= lim){ b.end(); toast('O PDF inteiro tem ' + mbTxt(inteiro.length) + ' e já cabe no limite. Não precisa dividir.', { ms:3500 }); return offer(inteiro, safeName(base, '.pdf')); }
+    /* cada parte leva o maior número de folhas que cabe no limite (cresce e depois acerta pela metade) */
+    const partes = [], grandes = [], porPg = inteiro.length / l.length;
+    let i = 0;
+    while(i < l.length){
+      const resta = l.length - i, cache = new Map();
+      const tam = async k => { if(!cache.has(k)){ b.txt('Montando a parte ' + (partes.length + 1) + ' (' + plural(k, 'folha', 'folhas') + ')… aguarde'); cache.set(k, await monta(l.slice(i, i + k))); } return cache.get(k); };
+      let ok = 0, ruim = resta + 1, k = Math.max(1, Math.min(resta, Math.floor(lim * 0.9 / porPg)));
+      while(ok + 1 < ruim){
+        if((await tam(k)).length <= lim){ ok = k; k = Math.min(resta, ruim - 1, Math.max(k + 1, k * 2)); if(ok === resta) break; }
+        else { ruim = k; k = Math.max(ok + 1, Math.floor((ok + ruim) / 2)); }
+        if(k >= ruim) k = ruim - 1;
+        if(k <= ok){ if(ok + 1 < ruim) k = ok + 1; else break; }
+      }
+      const kk = Math.max(1, ok), bytes = await tam(kk);
+      if(bytes.length > lim) grandes.push(l[i].fl);
+      partes.push({ fs:l.slice(i, i + kk), bytes });
+      i += kk;
+    }
+    b.end();
+    const N = partes.length;
+    const arqs = partes.map((x, j) => ({ data:x.bytes, nome:safeName(base + ' - parte ' + (j + 1) + ' de ' + N + ' (fls. ' + faixaTexto(x.fs.map(f => f.fl)) + ')', '.pdf') }));
+    partesSheet(arqs, lim, grandes);
+  }catch(e){ b.end(); console.error(e); toast('Não foi possível dividir: ' + (e.message || e)); }
+}
+
+/* as partes prontas: cada uma com o seu botão (para mandar uma por e-mail) e "todas" de uma vez */
+function partesSheet(arqs, lim, grandes){
+  const limT = (Math.round(lim / MB * 10) / 10).toString().replace('.', ',') + ' MB';
+  const N = arqs.length, arte = !PWA && window.claude && window.claude.use;
+  const files = arqs.map(a => new File([a.data], a.nome, { type:'application/pdf' }));
+  let pode = false; if(!arte) try{ pode = !!(navigator.canShare && navigator.canShare({ files })); }catch(e){}
+  const um = async i => {
+    if(arte || !pode) return offer(arqs[i].data, arqs[i].nome);
+    try{ await navigator.share({ files:[files[i]], title:arqs[i].nome }); }catch(e){ if(!e || e.name !== 'AbortError') offer(arqs[i].data, arqs[i].nome); }
+  };
+  const baixar = async () => {
+    if(arte){ for(const a of arqs) await offer(a.data, a.nome); return; }
+    files.forEach((f, i) => setTimeout(() => { const a = h('a', { href:URL.createObjectURL(f), download:f.name }); document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); }, i * 400));
+    toast(plural(N, 'arquivo baixado', 'arquivos baixados') + '.');
+  };
+  const linhas = arqs.map((a, i) => h('div', { class:'opt expArq' }, h('span', { html:I.pdf }),
+    h('div', { class:'grow', style:{ minWidth:0 } }, h('b', { style:{ display:'block', overflowWrap:'anywhere' } }, a.nome), h('small', { class:'muted' }, mbTxt(a.data.length))),
+    h('button', { class:'btn sm ghost', onclick:() => um(i) }, h('span', { html:I.share }), 'Enviar')));
+  const aviso = grandes && grandes.length ? h('p', { class:'sgNota', style:{ color:'#C93400' } }, 'Atenção: ' + (grandes.length === 1 ? 'a folha ' + grandes[0] + ' sozinha passa' : 'as folhas ' + grandes.join(', ') + ' sozinhas passam') + ' de ' + limT + ' e ' + (grandes.length === 1 ? 'ficou numa parte só' : 'ficaram cada uma numa parte') + '.') : null;
+  sheet({ titulo:plural(N, 'parte pronta', 'partes prontas'), corpo:[
+    h('p', { class:'sgNota', style:{ margin:0 } }, 'Cada parte tem até ' + limT + '. A numeração das folhas continua de uma parte para a outra.'),
+    aviso].concat(linhas),
+    botoes:[pode ? { t:'Enviar todas', v:'acc', ic:'share', fica:true, fn:async () => { try{ await navigator.share({ files, title:arqs[0].nome }); }catch(e){ if(!e || e.name !== 'AbortError') toast('Não foi possível compartilhar todas juntas. Use Enviar em cada parte.'); } } } : null,
+      { t:'Baixar todas', v:pode ? 'ghost' : 'pri', ic:'dl', fica:true, fn:baixar }] });
+}
+
+/* ---------- arquivos muito grandes: aviso antes de entrar ---------- */
+async function filtrarGrandes(ents){
+  const out = [];
+  for(const it of ents){
+    const n = it.bytes ? it.bytes.length : 0;
+    if(n > LIM_GRANDE && !await confirmar('Arquivo muito grande', '“' + it.name + '” tem ' + mbTxt(n) + '. Acima de 100 MB o celular pode ficar lento ou travar, e e-mails e sistemas costumam recusar. Incluir mesmo assim? (Depois, use “Dividir para enviar”.)', 'Incluir mesmo assim')) continue;
+    out.push(it);
+  }
+  return out;
+}
+function avisoGrande(bytes, l){
+  if(!bytes || bytes.length <= LIM_GRANDE) return;
+  toast('O PDF ficou com ' + mbTxt(bytes.length) + ': acima de 100 MB, e-mails e sistemas costumam recusar.', { acao:'Dividir', fn:() => dividirSheet(l), ms:8000 });
 }
 
 /* ===== h_rel.js ===== */
@@ -6408,6 +8957,7 @@ function migrarSettings(){
   if(!settings.sigla) settings.sigla = P.sigla;
   settings.carimbo = 'nenhum'; settings.signatarios.forEach(x => { delete x.carimbo; });
   if((settings.v || 0) < 4){ settings.v = 4; delete settings.sigLine; settings.timbre = 'completo'; }
+  migrarSignatarios();
   saveSettings();
 }
 
